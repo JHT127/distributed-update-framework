@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,6 +7,8 @@
 #include <netinet/in.h>
 #include "../common/config.h"
 #include "logger.h"
+#include "thread_pool.h"
+#include "client_handler.h"
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
@@ -40,23 +41,17 @@ int main(int argc, char *argv[]) {
     strncpy(pool_sz, tmp, sizeof(pool_sz) - 1);
 
     logger_init(log_file);
-    logger_write(LOG_INFO, 0, "--", "Server starting on port %s", port);
+    logger_write(LOG_INFO, 0, "--", "[SERVER] Starting on port %s with pool size %s", port, pool_sz);
 
-    // create TCP socket
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0) {
-        logger_write(LOG_ERROR, 0, "--", "socket() failed");
+        logger_write(LOG_ERROR, 0, "--", "[SERVER] socket() failed");
         logger_close();
         return 1;
     }
 
-    // allow immediate reuse of the port after restart
     int opt = 1;
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-        logger_write(LOG_ERROR, 0, "--", "setsockopt() failed");
-        logger_close();
-        return 1;
-    }
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
@@ -65,49 +60,41 @@ int main(int argc, char *argv[]) {
     addr.sin_port        = htons(atoi(port));
 
     if (bind(server_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        logger_write(LOG_ERROR, 0, "--", "bind() failed on port %s", port);
+        logger_write(LOG_ERROR, 0, "--", "[SERVER] bind() failed on port %s", port);
         logger_close();
         return 1;
     }
 
     if (listen(server_fd, 10) < 0) {
-        logger_write(LOG_ERROR, 0, "--", "listen() failed");
+        logger_write(LOG_ERROR, 0, "--", "[SERVER] listen() failed");
         logger_close();
         return 1;
     }
 
-    logger_write(LOG_INFO, 0, "--", "Listening on port %s — waiting for one client...", port);
+    // create thread pool — queue size = 4x pool size
+    ThreadPool *pool = thread_pool_create(atoi(pool_sz), atoi(pool_sz) * 4);
+    logger_write(LOG_INFO, 0, "--", "[SERVER] Thread pool ready (%s workers) — listening...", pool_sz);
 
-    // accept one client
-    struct sockaddr_in client_addr;
-    socklen_t client_len = sizeof(client_addr);
-    int client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &client_len);
-    if (client_fd < 0) {
-        logger_write(LOG_ERROR, 0, "--", "accept() failed");
-        close(server_fd);
-        logger_close();
-        return 1;
+    // accept loop — runs forever, dispatches every client to a worker thread
+    while (1) {
+        struct sockaddr_in client_addr;
+        socklen_t client_len = sizeof(client_addr);
+        int *client_fd = malloc(sizeof(int));
+        *client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &client_len);
+        if (*client_fd < 0) {
+            logger_write(LOG_WARN, 0, "--", "[SERVER] accept() failed, continuing...");
+            free(client_fd);
+            continue;
+        }
+
+        char client_ip[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, sizeof(client_ip));
+        logger_write(LOG_INFO, 0, client_ip, "[SERVER] Accepted connection — dispatching to pool");
+
+        thread_pool_submit(pool, handle_client, client_fd);
     }
 
-    char client_ip[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, sizeof(client_ip));
-    logger_write(LOG_INFO, 0, client_ip, "Accepted connection");
-
-    // read message from client
-    char buf[256];
-    memset(buf, 0, sizeof(buf));
-    int n = recv(client_fd, buf, sizeof(buf) - 1, 0);
-    if (n > 0) {
-        logger_write(LOG_INFO, 0, client_ip, "Received: %s", buf);
-        send(client_fd, "ACK", 3, 0);
-        logger_write(LOG_INFO, 0, client_ip, "Sent: ACK");
-    } else {
-        logger_write(LOG_WARN, 0, client_ip, "recv() returned nothing");
-    }
-
-    close(client_fd);
-    logger_write(LOG_INFO, 0, client_ip, "Connection closed");
-
+    thread_pool_destroy(pool);
     close(server_fd);
     logger_close();
     return 0;
