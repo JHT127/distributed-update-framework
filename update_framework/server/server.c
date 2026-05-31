@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../common/config.h"
+#include "logger.h"
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
@@ -11,7 +12,6 @@ int main(int argc, char *argv[]) {
 
     const char *cfg = argv[1];
     char port[64], version[64], upd_file[256], log_file[256], pool_sz[64];
-
     char *tmp;
 
     tmp = parse_config(cfg, "PORT");
@@ -34,12 +34,15 @@ int main(int argc, char *argv[]) {
     if (!tmp) { fprintf(stderr, "[ERROR] Missing THREAD_POOL_SIZE\n"); return 1; }
     strncpy(pool_sz, tmp, sizeof(pool_sz) - 1);
 
-    printf("[CONFIG] Port: %s\n", port);
-    printf("[CONFIG] Latest version: %s\n", version);
-    printf("[CONFIG] Update file: %s\n", upd_file);
-    printf("[CONFIG] Log file: %s\n", log_file);
-    printf("[CONFIG] Thread pool size: %s\n", pool_sz);
-    printf("Server ready. Exiting (no socket yet).\n");
+    // init logger first — everything after this uses logger_write()
+    logger_init(log_file);
 
+    logger_write(LOG_INFO, 0, "--", "Server starting on port %s", port);
+    logger_write(LOG_INFO, 0, "--", "Latest version: %s", version);
+    logger_write(LOG_INFO, 0, "--", "Update file: %s", upd_file);
+    logger_write(LOG_INFO, 0, "--", "Thread pool size: %s", pool_sz);
+    logger_write(LOG_INFO, 0, "--", "Server ready. Exiting (no socket yet).");
+
+    logger_close();
     return 0;
 }
