@@ -33,10 +33,10 @@ $(BDIR)/client.o: client/client.c common/config.h common/protocol.h
 	$(CC) $(CFLAGS) -c client/client.c -o $(BDIR)/client.o
 
 $(BINDIR)/server: $(BDIR)/server.o $(BDIR)/config.o $(BDIR)/logger.o $(BDIR)/thread_pool.o $(BDIR)/client_handler.o $(BDIR)/version_store.o
-	$(CC) $(CFLAGS) $^ -o $@
+	$(CC) $(CFLAGS) $^ -o $@ -lssl -lcrypto
 
 $(BINDIR)/client: $(BDIR)/client.o $(BDIR)/config.o
-	$(CC) $(CFLAGS) $^ -o $@
+	$(CC) $(CFLAGS) $^ -o $@ -lssl -lcrypto
 
 clean:
 	rm -rf $(BDIR) $(BINDIR) logs/*.log
