@@ -1,16 +1,37 @@
-CC = gcc
+CC     = gcc
 CFLAGS = -Wall -Wextra -pthread -g
 
-SERVER_SRCS = server/server.c common/config.c
-CLIENT_SRCS = client/client.c common/config.c
+# Object files
+CONFIG_OBJ  = common/config.o
+SERVER_OBJS = server/server.o $(CONFIG_OBJ)
+CLIENT_OBJS = client/client.o $(CONFIG_OBJ)
 
-all: server client
+all: bin_server bin_client
 
-server: $(SERVER_SRCS) common/protocol.h common/config.h
-	$(CC) $(CFLAGS) $(SERVER_SRCS) -o server
+# Compile rules
+common/config.o: common/config.c common/config.h
+	$(CC) $(CFLAGS) -c common/config.c -o common/config.o
 
-client: $(CLIENT_SRCS) common/protocol.h common/config.h
-	$(CC) $(CFLAGS) $(CLIENT_SRCS) -o client
+server/server.o: server/server.c common/config.h common/protocol.h
+	$(CC) $(CFLAGS) -c server/server.c -o server/server.o
+
+client/client.o: client/client.c common/config.h common/protocol.h
+	$(CC) $(CFLAGS) -c client/client.c -o client/client.o
+
+# Link rules
+bin_server: $(SERVER_OBJS)
+	$(CC) $(CFLAGS) $(SERVER_OBJS) -o bin_server
+
+bin_client: $(CLIENT_OBJS)
+	$(CC) $(CFLAGS) $(CLIENT_OBJS) -o bin_client
+
+# Run both and show output
+test: all
+	@echo "--- SERVER OUTPUT ---"
+	@./bin_server config/server.conf
+	@echo ""
+	@echo "--- CLIENT OUTPUT ---"
+	@./bin_client config/client.conf
 
 clean:
-	rm -f server client logs/*.log
+	rm -f bin_server bin_client common/*.o server/*.o client/*.o logs/*.log
