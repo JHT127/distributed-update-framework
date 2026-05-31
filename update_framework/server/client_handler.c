@@ -1,17 +1,19 @@
 #include "client_handler.h"
 #include "logger.h"
+#include "version_store.h"
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include <pthread.h>
+#include "../common/protocol.h"
 
 void handle_client(void *arg) {
     int fd = *(int *)arg;
     free(arg);
 
-    // get client IP for logging
     struct sockaddr_in addr;
     socklen_t len = sizeof(addr);
     char client_ip[INET_ADDRSTRLEN];
@@ -20,22 +22,37 @@ void handle_client(void *arg) {
     else
         strncpy(client_ip, "unknown", sizeof(client_ip));
 
-    // get thread id for logging
-    // pthread_self() returns a large opaque value — cast to int for a short readable id
     int tid = (int)(pthread_self() % 100);
 
-    logger_write(LOG_INFO, tid, client_ip, "[SERVER] Handling client");
+    logger_write(LOG_INFO, tid, client_ip, "[SERVER] Client connected");
 
-    char buf[256];
-    memset(buf, 0, sizeof(buf));
-    int n = recv(fd, buf, sizeof(buf) - 1, 0);
-    if (n > 0) {
-        logger_write(LOG_INFO, tid, client_ip, "[SERVER] Received: %s", buf);
-        send(fd, "ACK", 3, 0);
-        logger_write(LOG_INFO, tid, client_ip, "[SERVER] Sent: ACK");
-    } else {
-        logger_write(LOG_WARN, tid, client_ip, "[SERVER] recv() returned nothing");
+    // receive version request
+    VersionRequest req;
+    int n = recv(fd, &req, sizeof(req), MSG_WAITALL);
+    if (n != sizeof(req)) {
+        logger_write(LOG_WARN, tid, client_ip, "[SERVER] Failed to receive VersionRequest");
+        close(fd);
+        return;
     }
+    req.version = ntohl(req.version);
+    logger_write(LOG_INFO, tid, client_ip, "[SERVER] Client version: %u", req.version);
+
+    uint32_t latest = version_store_get_latest();
+
+    // build and send response
+    UpdateResponse resp;
+    memset(&resp, 0, sizeof(resp));
+    resp.update_available = (req.version < latest) ? 1 : 0;
+    resp.file_size        = htonl(0);
+
+    if (resp.update_available) {
+        logger_write(LOG_INFO, tid, client_ip, "[SERVER] Client is outdated (latest: %u) — update available", latest);
+    } else {
+        logger_write(LOG_INFO, tid, client_ip, "[SERVER] Client is up to date");
+    }
+
+    send(fd, &resp, sizeof(resp), 0);
+    logger_write(LOG_INFO, tid, client_ip, "[SERVER] Response sent");
 
     close(fd);
     logger_write(LOG_INFO, tid, client_ip, "[SERVER] Connection closed");
