@@ -1,6 +1,6 @@
-
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "../common/config.h"
 
 int main(int argc, char *argv[]) {
@@ -10,16 +10,25 @@ int main(int argc, char *argv[]) {
     }
 
     const char *cfg = argv[1];
+    char server_ip[64], server_port[64], cur_version[64], dl_dir[256];
 
-    char *server_ip   = parse_config(cfg, "SERVER_IP");
-    char *server_port = parse_config(cfg, "SERVER_PORT");
-    char *cur_version = parse_config(cfg, "CURRENT_VERSION");
-    char *dl_dir      = parse_config(cfg, "DOWNLOAD_DIR");
+    char *tmp;
 
-    if (!server_ip || !server_port || !cur_version || !dl_dir) {
-        fprintf(stderr, "[ERROR] Missing required config values.\n");
-        return 1;
-    }
+    tmp = parse_config(cfg, "SERVER_IP");
+    if (!tmp) { fprintf(stderr, "[ERROR] Missing SERVER_IP\n"); return 1; }
+    strncpy(server_ip, tmp, sizeof(server_ip) - 1);
+
+    tmp = parse_config(cfg, "SERVER_PORT");
+    if (!tmp) { fprintf(stderr, "[ERROR] Missing SERVER_PORT\n"); return 1; }
+    strncpy(server_port, tmp, sizeof(server_port) - 1);
+
+    tmp = parse_config(cfg, "CURRENT_VERSION");
+    if (!tmp) { fprintf(stderr, "[ERROR] Missing CURRENT_VERSION\n"); return 1; }
+    strncpy(cur_version, tmp, sizeof(cur_version) - 1);
+
+    tmp = parse_config(cfg, "DOWNLOAD_DIR");
+    if (!tmp) { fprintf(stderr, "[ERROR] Missing DOWNLOAD_DIR\n"); return 1; }
+    strncpy(dl_dir, tmp, sizeof(dl_dir) - 1);
 
     printf("[CONFIG] Server: %s:%s\n", server_ip, server_port);
     printf("[CONFIG] Current version: %s\n", cur_version);
