@@ -15,6 +15,7 @@ static int      g_server_port;
 static uint32_t g_current_version;
 static char     g_download_dir[256];
 
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 // compute MD5 of a file, write 32-char hex string into out_hex (must be 33+ bytes)
 static int compute_md5(const char *filepath, char *out_hex) {
     FILE *f = fopen(filepath, "rb");
