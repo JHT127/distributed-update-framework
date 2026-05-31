@@ -42,9 +42,10 @@ int main(int argc, char *argv[]) {
     strncpy(pool_sz, tmp, sizeof(pool_sz) - 1);
 
     logger_init(log_file);
-    version_store_init((uint32_t)atoi(version));
+    version_store_init((uint32_t)atoi(version), upd_file);
 
     logger_write(LOG_INFO, 0, "--", "[SERVER] Starting on port %s, latest version %s, pool size %s", port, version, pool_sz);
+    logger_write(LOG_INFO, 0, "--", "[SERVER] Update file: %s", upd_file);
 
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0) {
