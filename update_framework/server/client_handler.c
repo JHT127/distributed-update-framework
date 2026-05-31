@@ -12,6 +12,8 @@
 #include <openssl/md5.h>
 #include "../common/protocol.h"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 static int compute_md5(const char *filepath, char *out_hex) {
     FILE *f = fopen(filepath, "rb");
     if (!f) return -1;
@@ -31,6 +33,7 @@ static int compute_md5(const char *filepath, char *out_hex) {
     out_hex[32] = '\0';
     return 0;
 }
+#pragma GCC diagnostic pop
 
 void handle_client(void *arg) {
     int fd = *(int *)arg;

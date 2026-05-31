@@ -18,6 +18,8 @@ static char     g_auth_token[TOKEN_LEN + 1];
 static int      g_max_retries;
 static int      g_retry_delay;
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 static int compute_md5(const char *filepath, char *out_hex) {
     FILE *f = fopen(filepath, "rb");
     if (!f) return -1;
@@ -37,6 +39,7 @@ static int compute_md5(const char *filepath, char *out_hex) {
     out_hex[32] = '\0';
     return 0;
 }
+#pragma GCC diagnostic pop
 
 // returns 1 on success (up to date or downloaded+verified), 0 on failure
 static int try_update(void) {
