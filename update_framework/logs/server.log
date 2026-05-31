@@ -1,0 +1,15 @@
+[2026-06-01 02:20:04] [INFO ] [TID:0] [--] Logger initialized
+[2026-06-01 02:20:04] [INFO ] [TID:0] [--] [SERVER] Starting on port 9000, latest version 2, pool size 8
+[2026-06-01 02:20:04] [INFO ] [TID:0] [--] [SERVER] Update file: update_packages/update_v2.pkg
+[2026-06-01 02:20:04] [INFO ] [TID:0] [--] [SERVER] Thread pool ready (8 workers) — listening...
+[2026-06-01 02:20:15] [INFO ] [TID:0] [127.0.0.1] [SERVER] Accepted connection — dispatching to pool
+[2026-06-01 02:20:15] [INFO ] [TID:76] [127.0.0.1] [SERVER] Client connected
+[2026-06-01 02:20:15] [INFO ] [TID:76] [127.0.0.1] [SERVER] Client version: 1
+[2026-06-01 02:20:15] [INFO ] [TID:76] [127.0.0.1] [SERVER] Client is outdated (latest: 2) — sending 25 bytes
+[2026-06-01 02:20:15] [INFO ] [TID:76] [127.0.0.1] [SERVER] MD5 checksum: 58c6ecad44e85c257b347fe19abbeb2d
+[2026-06-01 02:20:15] [INFO ] [TID:76] [127.0.0.1] [SERVER] Transfer complete — 25 bytes sent
+[2026-06-01 02:20:15] [INFO ] [TID:76] [127.0.0.1] [SERVER] Connection closed
+[2026-06-01 02:20:26] [INFO ] [TID:0] [127.0.0.1] [SERVER] Accepted connection — dispatching to pool
+[2026-06-01 02:20:26] [INFO ] [TID:72] [127.0.0.1] [SERVER] Client connected
+[2026-06-01 02:20:26] [INFO ] [TID:72] [127.0.0.1] [SERVER] Client version: 2
+[2026-06-01 02:20:26] [INFO ] [TID:72] [127.0.0.1] [SERVER] Client is up to date — no transfer needed
