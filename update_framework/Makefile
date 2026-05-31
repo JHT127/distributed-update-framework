@@ -1,31 +1,29 @@
 CC     = gcc
 CFLAGS = -Wall -Wextra -pthread -g
+BDIR   = build
 
-# Object files
-CONFIG_OBJ  = common/config.o
-SERVER_OBJS = server/server.o $(CONFIG_OBJ)
-CLIENT_OBJS = client/client.o $(CONFIG_OBJ)
+all: $(BDIR) bin_server bin_client
 
-all: bin_server bin_client
+$(BDIR):
+	mkdir -p $(BDIR)
 
-# Compile rules
-common/config.o: common/config.c common/config.h
-	$(CC) $(CFLAGS) -c common/config.c -o common/config.o
+# Compile rules — all .o go into build/
+$(BDIR)/config.o: common/config.c common/config.h
+	$(CC) $(CFLAGS) -c common/config.c -o $(BDIR)/config.o
 
-server/server.o: server/server.c common/config.h common/protocol.h
-	$(CC) $(CFLAGS) -c server/server.c -o server/server.o
+$(BDIR)/server.o: server/server.c common/config.h common/protocol.h
+	$(CC) $(CFLAGS) -c server/server.c -o $(BDIR)/server.o
 
-client/client.o: client/client.c common/config.h common/protocol.h
-	$(CC) $(CFLAGS) -c client/client.c -o client/client.o
+$(BDIR)/client.o: client/client.c common/config.h common/protocol.h
+	$(CC) $(CFLAGS) -c client/client.c -o $(BDIR)/client.o
 
 # Link rules
-bin_server: $(SERVER_OBJS)
-	$(CC) $(CFLAGS) $(SERVER_OBJS) -o bin_server
+bin_server: $(BDIR)/server.o $(BDIR)/config.o
+	$(CC) $(CFLAGS) $(BDIR)/server.o $(BDIR)/config.o -o bin_server
 
-bin_client: $(CLIENT_OBJS)
-	$(CC) $(CFLAGS) $(CLIENT_OBJS) -o bin_client
+bin_client: $(BDIR)/client.o $(BDIR)/config.o
+	$(CC) $(CFLAGS) $(BDIR)/client.o $(BDIR)/config.o -o bin_client
 
-# Run both and show output
 test: all
 	@echo "--- SERVER OUTPUT ---"
 	@./bin_server config/server.conf
@@ -33,5 +31,6 @@ test: all
 	@echo "--- CLIENT OUTPUT ---"
 	@./bin_client config/client.conf
 
+# Wipes everything generated
 clean:
-	rm -f bin_server bin_client common/*.o server/*.o client/*.o logs/*.log
+	rm -rf $(BDIR) bin_server bin_client logs/*.log

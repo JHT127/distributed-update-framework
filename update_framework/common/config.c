@@ -18,7 +18,7 @@ char *parse_config(const char *filename, const char *key) {
 
     while (fgets(line, sizeof(line), f)) {
         // Strip trailing newline
-        line[strcspn(line, "\n")] = '\0';
+        line[strcspn(line, "\r\n")] = '\0';
 
         char *eq = strchr(line, '=');
         if (!eq) continue;
