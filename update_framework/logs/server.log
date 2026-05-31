@@ -1,0 +1,48 @@
+[2026-06-01 01:46:22] [INFO ] [TID:0] [--] Logger initialized
+[2026-06-01 01:46:22] [INFO ] [TID:0] [--] [SERVER] Starting on port 9000 with pool size 8
+[2026-06-01 01:46:22] [INFO ] [TID:0] [--] [SERVER] Thread pool ready (8 workers) — listening...
+[2026-06-01 01:46:27] [INFO ] [TID:0] [127.0.0.1] [SERVER] Accepted connection — dispatching to pool
+[2026-06-01 01:46:27] [INFO ] [TID:96] [127.0.0.1] [SERVER] Handling client
+[2026-06-01 01:46:27] [INFO ] [TID:96] [127.0.0.1] [SERVER] Received: HELLO
+[2026-06-01 01:46:27] [INFO ] [TID:96] [127.0.0.1] [SERVER] Sent: ACK
+[2026-06-01 01:46:27] [INFO ] [TID:96] [127.0.0.1] [SERVER] Connection closed
+[2026-06-01 01:46:28] [INFO ] [TID:0] [127.0.0.1] [SERVER] Accepted connection — dispatching to pool
+[2026-06-01 01:46:28] [INFO ] [TID:92] [127.0.0.1] [SERVER] Handling client
+[2026-06-01 01:46:28] [INFO ] [TID:92] [127.0.0.1] [SERVER] Received: HELLO
+[2026-06-01 01:46:28] [INFO ] [TID:92] [127.0.0.1] [SERVER] Sent: ACK
+[2026-06-01 01:46:28] [INFO ] [TID:92] [127.0.0.1] [SERVER] Connection closed
+[2026-06-01 01:46:29] [INFO ] [TID:0] [127.0.0.1] [SERVER] Accepted connection — dispatching to pool
+[2026-06-01 01:46:29] [INFO ] [TID:88] [127.0.0.1] [SERVER] Handling client
+[2026-06-01 01:46:29] [INFO ] [TID:88] [127.0.0.1] [SERVER] Received: HELLO
+[2026-06-01 01:46:29] [INFO ] [TID:88] [127.0.0.1] [SERVER] Sent: ACK
+[2026-06-01 01:46:29] [INFO ] [TID:88] [127.0.0.1] [SERVER] Connection closed
+[2026-06-01 01:46:30] [INFO ] [TID:0] [127.0.0.1] [SERVER] Accepted connection — dispatching to pool
+[2026-06-01 01:46:30] [INFO ] [TID:84] [127.0.0.1] [SERVER] Handling client
+[2026-06-01 01:46:30] [INFO ] [TID:84] [127.0.0.1] [SERVER] Received: HELLO
+[2026-06-01 01:46:30] [INFO ] [TID:84] [127.0.0.1] [SERVER] Sent: ACK
+[2026-06-01 01:46:30] [INFO ] [TID:84] [127.0.0.1] [SERVER] Connection closed
+[2026-06-01 01:46:31] [INFO ] [TID:0] [127.0.0.1] [SERVER] Accepted connection — dispatching to pool
+[2026-06-01 01:46:31] [INFO ] [TID:80] [127.0.0.1] [SERVER] Handling client
+[2026-06-01 01:46:31] [INFO ] [TID:80] [127.0.0.1] [SERVER] Received: HELLO
+[2026-06-01 01:46:31] [INFO ] [TID:80] [127.0.0.1] [SERVER] Sent: ACK
+[2026-06-01 01:46:31] [INFO ] [TID:80] [127.0.0.1] [SERVER] Connection closed
+[2026-06-01 01:46:31] [INFO ] [TID:0] [127.0.0.1] [SERVER] Accepted connection — dispatching to pool
+[2026-06-01 01:46:31] [INFO ] [TID:76] [127.0.0.1] [SERVER] Handling client
+[2026-06-01 01:46:31] [INFO ] [TID:76] [127.0.0.1] [SERVER] Received: HELLO
+[2026-06-01 01:46:31] [INFO ] [TID:76] [127.0.0.1] [SERVER] Sent: ACK
+[2026-06-01 01:46:31] [INFO ] [TID:76] [127.0.0.1] [SERVER] Connection closed
+[2026-06-01 01:46:32] [INFO ] [TID:0] [127.0.0.1] [SERVER] Accepted connection — dispatching to pool
+[2026-06-01 01:46:32] [INFO ] [TID:72] [127.0.0.1] [SERVER] Handling client
+[2026-06-01 01:46:32] [INFO ] [TID:72] [127.0.0.1] [SERVER] Received: HELLO
+[2026-06-01 01:46:32] [INFO ] [TID:72] [127.0.0.1] [SERVER] Sent: ACK
+[2026-06-01 01:46:32] [INFO ] [TID:72] [127.0.0.1] [SERVER] Connection closed
+[2026-06-01 01:46:33] [INFO ] [TID:0] [127.0.0.1] [SERVER] Accepted connection — dispatching to pool
+[2026-06-01 01:46:33] [INFO ] [TID:68] [127.0.0.1] [SERVER] Handling client
+[2026-06-01 01:46:33] [INFO ] [TID:68] [127.0.0.1] [SERVER] Received: HELLO
+[2026-06-01 01:46:33] [INFO ] [TID:68] [127.0.0.1] [SERVER] Sent: ACK
+[2026-06-01 01:46:33] [INFO ] [TID:68] [127.0.0.1] [SERVER] Connection closed
+[2026-06-01 01:46:34] [INFO ] [TID:0] [127.0.0.1] [SERVER] Accepted connection — dispatching to pool
+[2026-06-01 01:46:34] [INFO ] [TID:96] [127.0.0.1] [SERVER] Handling client
+[2026-06-01 01:46:34] [INFO ] [TID:96] [127.0.0.1] [SERVER] Received: HELLO
+[2026-06-01 01:46:34] [INFO ] [TID:96] [127.0.0.1] [SERVER] Sent: ACK
+[2026-06-01 01:46:34] [INFO ] [TID:96] [127.0.0.1] [SERVER] Connection closed
