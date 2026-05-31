@@ -51,5 +51,14 @@ test_logger: compile
 	@echo "--- Log file contents ---"
 	@cat logs/server.log
 
+test_tcp: compile
+	@echo "=== TEST: Basic TCP (Step 3) ==="
+	@echo "--- Starting server in background ---"
+	@./$(BINDIR)/server config/server.conf &
+	@sleep 1
+	@echo "--- Running client ---"
+	@./$(BINDIR)/client config/client.conf
+	@sleep 1
+
 clean:
 	rm -rf $(BDIR) $(BINDIR) logs/*.log
