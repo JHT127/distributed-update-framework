@@ -9,6 +9,7 @@
 #include "logger.h"
 #include "thread_pool.h"
 #include "client_handler.h"
+#include "version_store.h"
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
@@ -41,7 +42,9 @@ int main(int argc, char *argv[]) {
     strncpy(pool_sz, tmp, sizeof(pool_sz) - 1);
 
     logger_init(log_file);
-    logger_write(LOG_INFO, 0, "--", "[SERVER] Starting on port %s with pool size %s", port, pool_sz);
+    version_store_init((uint32_t)atoi(version));
+
+    logger_write(LOG_INFO, 0, "--", "[SERVER] Starting on port %s, latest version %s, pool size %s", port, version, pool_sz);
 
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0) {
@@ -71,11 +74,9 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // create thread pool — queue size = 4x pool size
     ThreadPool *pool = thread_pool_create(atoi(pool_sz), atoi(pool_sz) * 4);
     logger_write(LOG_INFO, 0, "--", "[SERVER] Thread pool ready (%s workers) — listening...", pool_sz);
 
-    // accept loop — runs forever, dispatches every client to a worker thread
     while (1) {
         struct sockaddr_in client_addr;
         socklen_t client_len = sizeof(client_addr);
