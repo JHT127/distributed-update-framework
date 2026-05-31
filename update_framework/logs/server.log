@@ -1,0 +1,5 @@
+[2026-06-01 02:39:55] [INFO ] [TID:0] [--] Logger initialized
+[2026-06-01 02:39:55] [INFO ] [TID:0] [--] [SERVER] Starting on port 9000, latest version 2, pool size 8
+[2026-06-01 02:39:55] [INFO ] [TID:0] [--] [SERVER] Update file: update_packages/update_v2.pkg
+[2026-06-01 02:39:55] [INFO ] [TID:0] [--] [SERVER] Tokens file: config/tokens.txt
+[2026-06-01 02:39:55] [INFO ] [TID:0] [--] [SERVER] Thread pool ready (8 workers) — listening...
