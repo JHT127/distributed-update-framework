@@ -18,7 +18,7 @@ int main(int argc, char *argv[]) {
     }
 
     const char *cfg = argv[1];
-    char port[64], version[64], upd_file[256], log_file[256], pool_sz[64];
+    char port[64], version[64], upd_file[256], log_file[256], pool_sz[64], tokens_file[256];
     char *tmp;
 
     tmp = parse_config(cfg, "PORT");
@@ -41,11 +41,16 @@ int main(int argc, char *argv[]) {
     if (!tmp) { fprintf(stderr, "[ERROR] Missing THREAD_POOL_SIZE\n"); return 1; }
     strncpy(pool_sz, tmp, sizeof(pool_sz) - 1);
 
+    tmp = parse_config(cfg, "TOKENS_FILE");
+    if (!tmp) { fprintf(stderr, "[ERROR] Missing TOKENS_FILE\n"); return 1; }
+    strncpy(tokens_file, tmp, sizeof(tokens_file) - 1);
+
     logger_init(log_file);
-    version_store_init((uint32_t)atoi(version), upd_file);
+    version_store_init((uint32_t)atoi(version), upd_file, tokens_file);
 
     logger_write(LOG_INFO, 0, "--", "[SERVER] Starting on port %s, latest version %s, pool size %s", port, version, pool_sz);
     logger_write(LOG_INFO, 0, "--", "[SERVER] Update file: %s", upd_file);
+    logger_write(LOG_INFO, 0, "--", "[SERVER] Tokens file: %s", tokens_file);
 
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0) {
