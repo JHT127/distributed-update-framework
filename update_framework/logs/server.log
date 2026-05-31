@@ -1,6 +1,0 @@
-[2026-06-01 01:25:45] [INFO ] [TID:0] [--] Logger initialized
-[2026-06-01 01:25:45] [INFO ] [TID:0] [--] Server starting on port 9000
-[2026-06-01 01:25:45] [INFO ] [TID:0] [--] Latest version: 2
-[2026-06-01 01:25:45] [INFO ] [TID:0] [--] Update file: update_packages/update_v2.pkg
-[2026-06-01 01:25:45] [INFO ] [TID:0] [--] Thread pool size: 8
-[2026-06-01 01:25:45] [INFO ] [TID:0] [--] Server ready. Exiting (no socket yet).
