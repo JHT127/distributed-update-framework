@@ -1,0 +1,7 @@
+[2026-06-01 01:31:13] [INFO ] [TID:0] [--] Logger initialized
+[2026-06-01 01:31:13] [INFO ] [TID:0] [--] Server starting on port 9000
+[2026-06-01 01:31:13] [INFO ] [TID:0] [--] Listening on port 9000 — waiting for one client...
+[2026-06-01 01:31:14] [INFO ] [TID:0] [127.0.0.1] Accepted connection
+[2026-06-01 01:31:14] [INFO ] [TID:0] [127.0.0.1] Received: HELLO
+[2026-06-01 01:31:14] [INFO ] [TID:0] [127.0.0.1] Sent: ACK
+[2026-06-01 01:31:14] [INFO ] [TID:0] [127.0.0.1] Connection closed
