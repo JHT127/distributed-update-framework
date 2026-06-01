@@ -1,0 +1,17 @@
+# Build output
+bin/
+build/
+
+# Logs
+logs/*.log
+
+# Downloaded updates
+/tmp/updates/
+
+# Editor/OS noise
+.DS_Store
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
