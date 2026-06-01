@@ -41,6 +41,8 @@ static int compute_md5(const char *filepath, char *out_hex) {
 }
 #pragma GCC diagnostic pop
 
+static uint32_t getCurrentVersion(void);
+
 // returns 1 on success (up to date or downloaded+verified), 0 on failure
 static int try_update(void) {
     // check for partial download to resume
@@ -92,7 +94,7 @@ static int try_update(void) {
 
     // send version request with resume offset
     VersionRequest req;
-    req.version       = htonl(g_current_version);
+    req.version       = htonl(getCurrentVersion());
     req.resume_offset = htonl(resume_offset);
     send(sock_fd, &req, sizeof(req), 0);
     printf("[CLIENT] Sent version: %u (resume offset: %u)\n", g_current_version, resume_offset);
@@ -164,6 +166,10 @@ static int try_update(void) {
         remove(out_path);
         return 0;
     }
+}
+
+uint32_t getCurrentVersion(void) {
+    return g_current_version;
 }
 
 void CheckForUpdate(void) {
