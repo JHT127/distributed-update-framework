@@ -39,4 +39,4 @@ $(BINDIR)/client: $(BDIR)/client.o $(BDIR)/config.o
 	$(CC) $(CFLAGS) $^ -o $@ -lssl -lcrypto
 
 clean:
-	rm -rf $(BDIR) $(BINDIR) logs/*.log
+	rm -rf $(BDIR) $(BINDIR) logs/*.log /tmp/updates/update_v2.pkg
