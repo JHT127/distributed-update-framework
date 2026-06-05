@@ -10,6 +10,7 @@
 #include "thread_pool.h"
 #include "client_handler.h"
 #include "version_store.h"
+#include "../visualizer/dashboard.h"  
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
@@ -44,6 +45,10 @@ int main(int argc, char *argv[]) {
     tmp = parse_config(cfg, "TOKENS_FILE");
     if (!tmp) { fprintf(stderr, "[ERROR] Missing TOKENS_FILE\n"); return 1; }
     strncpy(tokens_file, tmp, sizeof(tokens_file) - 1);
+
+    /* --- Init dashboard BEFORE logger so the feed is ready immediately --- */
+    dashboard_init(atoi(pool_sz), log_file);
+    dashboard_start();   /* opens the OpenGL window in a background thread */
 
     logger_init(log_file);
     version_store_init((uint32_t)atoi(version), upd_file, tokens_file);
@@ -97,6 +102,8 @@ int main(int argc, char *argv[]) {
         char client_ip[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, sizeof(client_ip));
         logger_write(LOG_INFO, 0, client_ip, "[SERVER] Accepted connection — dispatching to pool");
+
+        dashboard_on_connect();
 
         thread_pool_submit(pool, handle_client, client_fd);
     }
