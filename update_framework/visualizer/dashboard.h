@@ -53,6 +53,9 @@ typedef struct {
 
     /* server start time for uptime display */
     time_t     start_time;
+
+    /* counts new connections in the current second — flushed to timeline each tick */
+    int        connections_this_second;
 } ServerStats;
 
 extern ServerStats      g_stats;

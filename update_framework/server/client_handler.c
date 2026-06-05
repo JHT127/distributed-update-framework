@@ -1,4 +1,5 @@
 #include "client_handler.h"
+#include "thread_pool.h"
 #include "logger.h"
 #include "version_store.h"
 #include "../visualizer/dashboard.h"
@@ -36,10 +37,10 @@ static int compute_md5(const char *filepath, char *out_hex) {
 }
 #pragma GCC diagnostic pop
 
-/* Map a thread's pthread_self() to a dashboard slot 0..pool_size-1.
-   Simple modulo — good enough for up to MAX_THREADS workers. */
+/* Get this worker thread's dashboard slot via thread-local storage.
+   Assigned by the thread pool at creation — guaranteed unique per worker. */
 static int get_slot(void) {
-    return (int)(pthread_self() % MAX_THREADS);
+    return thread_pool_get_slot();
 }
 
 void handle_client(void *arg) {

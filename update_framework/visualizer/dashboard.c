@@ -513,7 +513,8 @@ static void cb_timer(int val) {
     if (now != last_tick) {
         last_tick = now;
         pthread_mutex_lock(&g_stats_mutex);
-        g_stats.timeline[g_stats.timeline_head] = g_stats.active_connections;
+        g_stats.timeline[g_stats.timeline_head] = g_stats.connections_this_second;
+        g_stats.connections_this_second = 0;
         g_stats.timeline_head = (g_stats.timeline_head + 1) % TIMELINE_LEN;
         pthread_mutex_unlock(&g_stats_mutex);
     }
@@ -591,6 +592,7 @@ void dashboard_push_log(const char *line) {
 void dashboard_on_connect(void) {
     pthread_mutex_lock(&g_stats_mutex);
     g_stats.active_connections++;
+    g_stats.connections_this_second++;
     g_stats.total_served++;
     pthread_mutex_unlock(&g_stats_mutex);
 }

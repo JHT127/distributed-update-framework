@@ -23,3 +23,7 @@ typedef struct {
 ThreadPool *thread_pool_create(int pool_size, int queue_size);
 void        thread_pool_submit(ThreadPool *pool, task_fn fn, void *arg);
 void        thread_pool_destroy(ThreadPool *pool);
+
+/* Returns the slot index (0..pool_size-1) of the calling worker thread.
+   Call this from inside handle_client() to get the correct dashboard slot. */
+int thread_pool_get_slot(void);

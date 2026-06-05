@@ -2,14 +2,35 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-// each worker thread runs this loop forever until shutdown
+/* Thread-local storage: each worker thread stores its own slot index here.
+   pthread_getspecific/setspecific gives every thread its own private copy. */
+static pthread_key_t  slot_key;
+static pthread_once_t slot_key_once = PTHREAD_ONCE_INIT;
+
+static void make_slot_key(void) {
+    pthread_key_create(&slot_key, free);
+}
+
+/* Worker context: pool pointer + this worker's slot index */
+typedef struct {
+    ThreadPool *pool;
+    int         slot;
+} WorkerCtx;
+
 static void *worker_loop(void *arg) {
-    ThreadPool *pool = (ThreadPool *)arg;
+    WorkerCtx *ctx = (WorkerCtx *)arg;
+    ThreadPool *pool = ctx->pool;
+
+    /* store slot index in thread-local storage so handle_client() can read it */
+    pthread_once(&slot_key_once, make_slot_key);
+    int *slot_ptr = malloc(sizeof(int));
+    *slot_ptr = ctx->slot;
+    pthread_setspecific(slot_key, slot_ptr);
+    free(ctx);   /* ctx was malloc'd in thread_pool_create */
 
     while (1) {
         pthread_mutex_lock(&pool->mutex);
 
-        // sleep until there is a task or we are shutting down
         while (pool->count == 0 && !pool->shutdown)
             pthread_cond_wait(&pool->not_empty, &pool->mutex);
 
@@ -18,7 +39,6 @@ static void *worker_loop(void *arg) {
             return NULL;
         }
 
-        // pop task from queue
         Task t = pool->queue[pool->head];
         pool->head = (pool->head + 1) % pool->queue_size;
         pool->count--;
@@ -26,12 +46,13 @@ static void *worker_loop(void *arg) {
         pthread_cond_signal(&pool->not_full);
         pthread_mutex_unlock(&pool->mutex);
 
-        // execute task outside the lock
         t.fn(t.arg);
     }
 }
 
 ThreadPool *thread_pool_create(int pool_size, int queue_size) {
+    pthread_once(&slot_key_once, make_slot_key);
+
     ThreadPool *pool = malloc(sizeof(ThreadPool));
     pool->threads    = malloc(sizeof(pthread_t) * pool_size);
     pool->queue      = malloc(sizeof(Task) * queue_size);
@@ -40,12 +61,16 @@ ThreadPool *thread_pool_create(int pool_size, int queue_size) {
     pool->head = pool->tail = pool->count = 0;
     pool->shutdown = 0;
 
-    pthread_mutex_init(&pool->mutex,     NULL);
-    pthread_cond_init(&pool->not_empty,  NULL);
-    pthread_cond_init(&pool->not_full,   NULL);
+    pthread_mutex_init(&pool->mutex,    NULL);
+    pthread_cond_init(&pool->not_empty, NULL);
+    pthread_cond_init(&pool->not_full,  NULL);
 
-    for (int i = 0; i < pool_size; i++)
-        pthread_create(&pool->threads[i], NULL, worker_loop, pool);
+    for (int i = 0; i < pool_size; i++) {
+        WorkerCtx *ctx = malloc(sizeof(WorkerCtx));
+        ctx->pool = pool;
+        ctx->slot = i;   /* slot 0, 1, 2 … pool_size-1 */
+        pthread_create(&pool->threads[i], NULL, worker_loop, ctx);
+    }
 
     return pool;
 }
@@ -53,7 +78,6 @@ ThreadPool *thread_pool_create(int pool_size, int queue_size) {
 void thread_pool_submit(ThreadPool *pool, task_fn fn, void *arg) {
     pthread_mutex_lock(&pool->mutex);
 
-    // wait if queue is full
     while (pool->count == pool->queue_size && !pool->shutdown)
         pthread_cond_wait(&pool->not_full, &pool->mutex);
 
@@ -62,7 +86,6 @@ void thread_pool_submit(ThreadPool *pool, task_fn fn, void *arg) {
         return;
     }
 
-    // push task onto queue
     pool->queue[pool->tail].fn  = fn;
     pool->queue[pool->tail].arg = arg;
     pool->tail = (pool->tail + 1) % pool->queue_size;
@@ -87,4 +110,11 @@ void thread_pool_destroy(ThreadPool *pool) {
     free(pool->threads);
     free(pool->queue);
     free(pool);
+}
+
+/* Called from handle_client() — returns this worker's slot (0..pool_size-1) */
+int thread_pool_get_slot(void) {
+    int *slot_ptr = (int *)pthread_getspecific(slot_key);
+    if (!slot_ptr) return 0;   /* fallback — should never happen */
+    return *slot_ptr;
 }
