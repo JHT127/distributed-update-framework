@@ -1,11 +1,17 @@
 /*
  * dashboard.c — OpenGL live dashboard for the Update Server
- * Fully responsive — all layout is relative to the actual window size.
  *
- * Layout proportions:
- *   Header bar    : top 11% of window height
- *   Middle row    : next 54%  (thread panel left 47% | timeline right 53%)
- *   Log feed      : bottom 32%
+ * Visual design based on the card-based dark UI mockup:
+ *   ┌─────────────────────────────────────────────────────────┐
+ *   │  Header: title · port · version badge · status dot      │
+ *   ├──────────┬──────────┬────────────┬───────────────────────┤
+ *   │ stat     │ stat     │ stat       │ stat                   │
+ *   ├──────────────────────┬───────────────────────────────────┤
+ *   │  Active Clients      │  Event Log                        │
+ *   │  (client cards)      │  (timestamped rows)               │
+ *   ├──────────────────────┴───────────────────────────────────┤
+ *   │  Client View (focused client detail)                     │
+ *   └─────────────────────────────────────────────────────────┘
  */
 
 #include "dashboard.h"
@@ -28,443 +34,681 @@ static int         g_pool_size = 8;
 static const char *g_log_path  = NULL;
 static pthread_t   g_dash_tid;
 
-/* live window size — updated in cb_reshape */
-static int g_win_w = 960;
-static int g_win_h = 680;
+static int g_win_w = 1100;
+static int g_win_h = 780;
 
 /* ------------------------------------------------------------------ */
-/*  Colour palette                                                      */
+/*  Colour Palette  (matches screenshot dark card theme)               */
 /* ------------------------------------------------------------------ */
 
-typedef struct { float r, g, b; } Color3;
+typedef struct { float r, g, b, a; } Color4;
+typedef struct { float r, g, b; }    Color3;
 
-static const Color3 C_BG       = {0.08f, 0.10f, 0.14f};
-static const Color3 C_PANEL    = {0.12f, 0.15f, 0.20f};
-static const Color3 C_BORDER   = {0.22f, 0.28f, 0.38f};
-static const Color3 C_HEADER   = {0.10f, 0.13f, 0.20f};
+/* Backgrounds */
+static const Color3 C_BG       = {0.09f, 0.10f, 0.11f};   /* #171819 */
+static const Color3 C_CARD     = {0.13f, 0.14f, 0.16f};   /* #202428 */
+static const Color3 C_CARD2    = {0.10f, 0.12f, 0.14f};   /* inner card */
+static const Color3 C_SEP      = {0.20f, 0.22f, 0.25f};   /* separator */
 
-static const Color3 C_IDLE     = {0.22f, 0.26f, 0.34f};
-static const Color3 C_AUTH     = {0.95f, 0.75f, 0.20f};
-static const Color3 C_VERSION  = {0.30f, 0.70f, 0.95f};
-static const Color3 C_TRANSFER = {0.35f, 0.90f, 0.55f};
-static const Color3 C_DONE     = {0.55f, 0.55f, 0.65f};
+/* Text */
+static const Color3 C_WHITE    = {0.95f, 0.96f, 0.97f};
+static const Color3 C_MUTED    = {0.50f, 0.54f, 0.60f};
+static const Color3 C_DIM      = {0.33f, 0.36f, 0.40f};
 
-static const Color3 C_WHITE    = {1.0f,  1.0f,  1.0f };
-static const Color3 C_GREY     = {0.55f, 0.60f, 0.68f};
-static const Color3 C_ACCENT   = {0.40f, 0.70f, 1.00f};
-static const Color3 C_WARN     = {1.00f, 0.45f, 0.25f};
+/* Accent / status */
+static const Color3 C_GREEN    = {0.27f, 0.80f, 0.44f};   /* running / done */
+static const Color3 C_ORANGE   = {0.95f, 0.60f, 0.20f};   /* v1.0 / v1.5 / sending */
+static const Color3 C_BLUE     = {0.35f, 0.65f, 0.95f};   /* CONN badge */
+static const Color3 C_LIME     = {0.55f, 0.85f, 0.30f};   /* threads used */
+static const Color3 C_TEAL     = {0.25f, 0.75f, 0.70f};   /* updates sent */
+static const Color3 C_WARN     = {0.90f, 0.35f, 0.25f};   /* error */
 
-static void set_color(Color3 c) { glColor3f(c.r, c.g, c.b); }
+/* Badge background alphas drawn manually */
+static void set_color3(Color3 c)              { glColor3f(c.r, c.g, c.b); }
+static void set_color4(Color3 c, float alpha) { glColor4f(c.r, c.g, c.b, alpha); }
 
 /* ------------------------------------------------------------------ */
-/*  2-D drawing helpers                                                 */
+/*  Drawing helpers                                                     */
 /* ------------------------------------------------------------------ */
 
 static void fill_rect(float x, float y, float w, float h) {
     glBegin(GL_QUADS);
-      glVertex2f(x,     y);
-      glVertex2f(x+w,   y);
-      glVertex2f(x+w,   y+h);
-      glVertex2f(x,     y+h);
+      glVertex2f(x,   y);   glVertex2f(x+w, y);
+      glVertex2f(x+w, y+h); glVertex2f(x,   y+h);
     glEnd();
 }
 
-static void fill_rect_grad(float x, float y, float w, float h,
-                            Color3 top, Color3 bot) {
-    glBegin(GL_QUADS);
-      glColor3f(bot.r, bot.g, bot.b); glVertex2f(x,   y);
-      glColor3f(bot.r, bot.g, bot.b); glVertex2f(x+w, y);
-      glColor3f(top.r, top.g, top.b); glVertex2f(x+w, y+h);
-      glColor3f(top.r, top.g, top.b); glVertex2f(x,   y+h);
-    glEnd();
-}
-
-static void stroke_rect(float x, float y, float w, float h) {
+static void stroke_rect_lw(float x, float y, float w, float h, float lw) {
+    glLineWidth(lw);
     glBegin(GL_LINE_LOOP);
-      glVertex2f(x,   y);
-      glVertex2f(x+w, y);
-      glVertex2f(x+w, y+h);
-      glVertex2f(x,   y+h);
+      glVertex2f(x,   y);   glVertex2f(x+w, y);
+      glVertex2f(x+w, y+h); glVertex2f(x,   y+h);
     glEnd();
 }
 
-/* draw string at (x,y) in window coords (bottom-left origin) */
+/* Rounded rectangle approximation using GL_POLYGON */
+static void fill_rounded(float x, float y, float w, float h, float r) {
+    /* Clamp radius */
+    if (r > w/2) r = w/2;
+    if (r > h/2) r = h/2;
+    int segs = 8;
+    glBegin(GL_POLYGON);
+    for (int c = 0; c < 4; c++) {
+        float cx = (c == 0 || c == 3) ? x + r : x + w - r;
+        float cy = (c == 0 || c == 1) ? y + r : y + h - r;
+        float a0 = (float)(c * 90 + 180) * 3.14159f / 180.0f;
+        for (int i = 0; i <= segs; i++) {
+            float a = a0 + i * (3.14159f/2.0f/segs);
+            glVertex2f(cx + r * cosf(a), cy + r * sinf(a));
+        }
+    }
+    glEnd();
+}
+
 static void draw_str(float x, float y, const char *s, void *font) {
     glRasterPos2f(x, y);
     for (; *s; s++) glutBitmapCharacter(font, *s);
 }
 
-/* pixel width of a string for a given GLUT bitmap font */
 static int str_width(const char *s, void *font) {
     int w = 0;
     for (; *s; s++) w += glutBitmapWidth(font, *s);
     return w;
 }
 
+/* Draw a filled pill label with text */
+static void draw_pill(float x, float y, float h, const char *text,
+                      Color3 text_col, Color3 bg_col, float bg_alpha, void *font) {
+    float pad  = h * 0.5f;
+    float tw   = (float)str_width(text, font);
+    float pw   = tw + pad * 2.0f;
+    set_color4(bg_col, bg_alpha);
+    glEnable(GL_BLEND);
+    fill_rounded(x, y, pw, h, h * 0.4f);
+    set_color4(bg_col, 0.55f);
+    /* thin border */
+    glLineWidth(0.8f);
+    /* skip stroke for cleaner look */
+    set_color3(text_col);
+    draw_str(x + pad, y + h * 0.25f, text, font);
+}
+
+/* Horizontal progress bar with track */
+static void draw_progress_bar(float x, float y, float w, float h,
+                               float progress, Color3 fill_col) {
+    /* track */
+    set_color4(C_SEP, 0.6f);
+    glEnable(GL_BLEND);
+    fill_rounded(x, y, w, h, h * 0.5f);
+    /* fill */
+    if (progress > 0.0f) {
+        float fw = w * progress;
+        if (fw < h) fw = h;
+        set_color3(fill_col);
+        fill_rounded(x, y, fw, h, h * 0.5f);
+    }
+}
+
+/* Divider line */
+static void draw_hline(float x, float y, float w) {
+    set_color4(C_SEP, 0.5f);
+    glEnable(GL_BLEND);
+    glLineWidth(0.6f);
+    glBegin(GL_LINES);
+      glVertex2f(x, y); glVertex2f(x + w, y);
+    glEnd();
+}
+
+/* Small dot indicator */
+static void draw_dot(float cx, float cy, float r, Color3 col) {
+    set_color3(col);
+    int segs = 12;
+    glBegin(GL_POLYGON);
+    for (int i = 0; i < segs; i++) {
+        float a = i * 2.0f * 3.14159f / segs;
+        glVertex2f(cx + r * cosf(a), cy + r * sinf(a));
+    }
+    glEnd();
+}
+
 /* ------------------------------------------------------------------ */
 /*  State helpers                                                       */
 /* ------------------------------------------------------------------ */
 
-static Color3 thread_color(ThreadState st) {
-    switch (st) {
-        case THREAD_IDLE:          return C_IDLE;
-        case THREAD_AUTH:          return C_AUTH;
-        case THREAD_VERSION_CHECK: return C_VERSION;
-        case THREAD_TRANSFERRING:  return C_TRANSFER;
-        case THREAD_DONE:          return C_DONE;
-    }
-    return C_IDLE;
+static Color3 version_pill_color(uint32_t ver, uint32_t latest) {
+    if (ver >= latest) return C_GREEN;
+    return C_ORANGE;
 }
 
-static const char *thread_state_str(ThreadState st) {
+static Color3 status_badge_color(ThreadState st) {
     switch (st) {
-        case THREAD_IDLE:          return "IDLE";
-        case THREAD_AUTH:          return "AUTH";
-        case THREAD_VERSION_CHECK: return "VERSION";
-        case THREAD_TRANSFERRING:  return "TRANSFER";
-        case THREAD_DONE:          return "DONE";
+        case THREAD_TRANSFERRING:  return C_ORANGE;
+        case THREAD_DONE:          return C_GREEN;
+        case THREAD_AUTH:          return C_BLUE;
+        case THREAD_VERSION_CHECK: return C_BLUE;
+        default:                   return C_MUTED;
     }
-    return "?";
+}
+
+static const char *status_badge_str(ThreadState st) {
+    switch (st) {
+        case THREAD_IDLE:          return "idle";
+        case THREAD_AUTH:          return "auth";
+        case THREAD_VERSION_CHECK: return "checking";
+        case THREAD_TRANSFERRING:  return "sending";
+        case THREAD_DONE:          return "done";
+    }
+    return "idle";
 }
 
 /* ------------------------------------------------------------------ */
-/*  Layout — computed fresh every frame from g_win_w / g_win_h         */
+/*  Layout constants                                                    */
 /* ------------------------------------------------------------------ */
 
-#define PAD       8.0f   /* outer padding */
-#define GAP       6.0f   /* gap between panels */
+#define PAD    12.0f
+#define GAP    10.0f
+#define R_CARD  8.0f   /* card corner radius */
 
-/* header occupies top 11% */
-#define HDR_H     (g_win_h * 0.11f)
+/* Header: top 10% */
+#define HDR_H   (g_win_h * 0.10f)
 
-/* log feed occupies bottom 30% */
-#define LOG_H     (g_win_h * 0.30f)
+/* Stat row: below header, 9% */
+#define STAT_Y  (g_win_h - HDR_H - g_win_h * 0.09f)
+#define STAT_H  (g_win_h * 0.09f)
 
-/* middle row fills the rest */
-#define MID_Y     (LOG_H + GAP)
-#define MID_H     (g_win_h - HDR_H - LOG_H - GAP * 2)
+/* Middle section: two panels side by side */
+#define MID_TOP   (g_win_h * 0.34f)
+#define MID_BOT   (STAT_Y - GAP)
+#define MID_H     (MID_BOT - MID_TOP)
+#define MID_Y     MID_TOP
 
-/* thread panel: left 47% of middle row */
-#define TP_X      PAD
-#define TP_Y      MID_Y
-#define TP_W      ((g_win_w - PAD*2 - GAP) * 0.47f)
-#define TP_H      MID_H
+/* Left panel: Active clients ~47% width */
+#define LP_X    PAD
+#define LP_Y    MID_Y
+#define LP_W    ((g_win_w - PAD*2 - GAP) * 0.47f)
+#define LP_H    MID_H
 
-/* timeline: right 53% of middle row */
-#define TL_X      (TP_X + TP_W + GAP)
-#define TL_Y      MID_Y
-#define TL_W      (g_win_w - TL_X - PAD)
-#define TL_H      MID_H
+/* Right panel: Event log */
+#define RP_X    (LP_X + LP_W + GAP)
+#define RP_Y    MID_Y
+#define RP_W    (g_win_w - RP_X - PAD)
+#define RP_H    MID_H
 
-/* log panel */
-#define LG_X      PAD
-#define LG_Y      PAD
-#define LG_W      (g_win_w - PAD*2)
-/* LG_H = LOG_H - PAD (bottom gap) */
+/* Bottom panel: Client View */
+#define CV_X    PAD
+#define CV_Y    PAD
+#define CV_W    (g_win_w - PAD*2)
+#define CV_H    (MID_Y - PAD - GAP)
+
+/* ------------------------------------------------------------------ */
+/*  Log event ring buffer                                               */
+/* ------------------------------------------------------------------ */
+
+#define EV_MAX   32
+#define EV_MSG   96
+
+typedef enum { EV_INFO, EV_CONN, EV_UPDT, EV_OK, EV_DONE, EV_WARN } EvType;
+
+typedef struct {
+    EvType type;
+    char   time_str[12];  /* "HH:MM:SS" */
+    char   msg[EV_MSG];
+} LogEvent;
+
+static LogEvent g_events[EV_MAX];
+static int      g_ev_count  = 0;
+static int      g_ev_head   = 0;
+static pthread_mutex_t g_ev_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+/* Determine event type from log line */
+static EvType classify_event(const char *line) {
+    if (strstr(line, "connected"))           return EV_CONN;
+    if (strstr(line, "sending") ||
+        strstr(line, "outdated") ||
+        strstr(line, "Transfer"))            return EV_UPDT;
+    if (strstr(line, "up to date") ||
+        strstr(line, "up-to-date") ||
+        strstr(line, "DONE") ||
+        strstr(line, "complete"))            return EV_DONE;
+    if (strstr(line, "Auth accepted") ||
+        strstr(line, "OK") ||
+        strstr(line, "up to date"))          return EV_OK;
+    if (strstr(line, "ERROR") ||
+        strstr(line, "WARN") ||
+        strstr(line, "failed"))              return EV_WARN;
+    return EV_INFO;
+}
+
+void dashboard_push_log(const char *line) {
+    /* Push into g_stats log feed (existing) */
+    pthread_mutex_lock(&g_stats_mutex);
+    for (int i = LOG_FEED_LINES-1; i > 0; i--)
+        memcpy(g_stats.log_feed[i], g_stats.log_feed[i-1], LOG_LINE_LEN);
+    strncpy(g_stats.log_feed[0], line, LOG_LINE_LEN-1);
+    g_stats.log_feed[0][LOG_LINE_LEN-1] = '\0';
+    if (g_stats.log_feed_count < LOG_FEED_LINES)
+        g_stats.log_feed_count++;
+    pthread_mutex_unlock(&g_stats_mutex);
+
+    /* Also push into event ring */
+    pthread_mutex_lock(&g_ev_mutex);
+    time_t now = time(NULL);
+    struct tm *tm = localtime(&now);
+    LogEvent *ev = &g_events[g_ev_head % EV_MAX];
+    snprintf(ev->time_str, sizeof(ev->time_str), "%02d:%02d:%02d",
+             tm->tm_hour, tm->tm_min, tm->tm_sec);
+    ev->type = classify_event(line);
+    /* Strip log prefix "[SERVER] " etc for cleaner display */
+    const char *msg = line;
+    const char *bracket = strstr(line, "] ");
+    if (bracket) msg = bracket + 2;
+    strncpy(ev->msg, msg, EV_MSG-1);
+    ev->msg[EV_MSG-1] = '\0';
+    /* Remove trailing newline */
+    int mlen = (int)strlen(ev->msg);
+    if (mlen > 0 && ev->msg[mlen-1] == '\n') ev->msg[mlen-1] = '\0';
+    g_ev_head++;
+    if (g_ev_count < EV_MAX) g_ev_count++;
+    pthread_mutex_unlock(&g_ev_mutex);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Track client versions for display                                   */
+/* ------------------------------------------------------------------ */
+
+/* We piggyback on thread state: track last known client version per slot */
+static uint32_t g_slot_version[MAX_THREADS];
 
 /* ------------------------------------------------------------------ */
 /*  HEADER                                                              */
 /* ------------------------------------------------------------------ */
 
-static void draw_header(ServerStats *s, time_t now) {
+static void draw_header(ServerStats *s) {
     float hx = 0, hy = g_win_h - HDR_H, hw = g_win_w, hh = HDR_H;
 
-    Color3 htop = {0.18f, 0.24f, 0.38f};
-    fill_rect_grad(hx, hy, hw, hh, htop, C_HEADER);
+    /* Dark header background */
+    set_color3(C_CARD);
+    fill_rect(hx, hy, hw, hh);
 
-    /* title — vertically centred in top half of header */
-    float title_y = hy + hh * 0.60f;
-    set_color(C_WHITE);
-    draw_str(PAD + 4, title_y, "UPDATE SERVER  --  LIVE DASHBOARD",
-             GLUT_BITMAP_HELVETICA_18);
+    /* Bottom border */
+    draw_hline(hx, hy, hw);
 
-    /* uptime — right side */
-    long uptime = (long)(now - s->start_time);
-    char upstr[48];
-    snprintf(upstr, sizeof(upstr), "UPTIME  %02ld:%02ld:%02ld",
-             uptime/3600, (uptime%3600)/60, uptime%60);
-    set_color(C_GREY);
-    float uw = (float)str_width(upstr, GLUT_BITMAP_HELVETICA_12);
-    draw_str(hw - uw - PAD*2, title_y, upstr, GLUT_BITMAP_HELVETICA_12);
+    /* Server icon — simple rectangle stack */
+    float ix = PAD + 4, iy = hy + hh * 0.5f - 7;
+    set_color4(C_MUTED, 0.8f);
+    glEnable(GL_BLEND);
+    fill_rounded(ix, iy, 18, 6, 2);
+    fill_rounded(ix, iy+8, 18, 6, 2);
 
-    /* stat badges — bottom half of header, evenly spaced */
-    typedef struct { const char *label; int value; Color3 col; } Badge;
-    Badge badges[] = {
-        { "ACTIVE",      s->active_connections, C_TRANSFER },
-        { "SERVED",      s->total_served,       C_ACCENT   },
-        { "UPDATED",     s->updates_sent,       C_VERSION  },
-        { "UP-TO-DATE",  s->up_to_date_count,   C_GREY     },
-        { "AUTH FAIL",   s->auth_failures,      C_WARN     },
+    /* Title */
+    float ty = hy + hh * 0.62f;
+    set_color3(C_WHITE);
+    draw_str(ix + 24, ty, "Update server", GLUT_BITMAP_HELVETICA_18);
+
+    /* Port badge */
+    char port_str[32] = "port 9090";
+    set_color3(C_MUTED);
+    draw_str(ix + 24 + str_width("Update server", GLUT_BITMAP_HELVETICA_18) + 10,
+             ty, port_str, GLUT_BITMAP_HELVETICA_12);
+
+    /* Version badge */
+    float bx = ix + 24 + str_width("Update server", GLUT_BITMAP_HELVETICA_18) + 12
+               + (float)str_width(port_str, GLUT_BITMAP_HELVETICA_12) + 8;
+    draw_pill(bx, hy + hh * 0.45f, 16, "v2.0 latest",
+              C_MUTED, C_SEP, 0.5f, GLUT_BITMAP_HELVETICA_10);
+
+    /* Running indicator — right side */
+    float rx = hw - PAD - (float)str_width("running", GLUT_BITMAP_HELVETICA_12) - 18;
+    draw_dot(rx, hy + hh * 0.52f, 5, C_GREEN);
+    set_color3(C_GREEN);
+    draw_str(rx + 9, ty - 2, "running", GLUT_BITMAP_HELVETICA_12);
+}
+
+/* ------------------------------------------------------------------ */
+/*  STAT ROW  (4 cards: connections / updates sent / up to date / threads)  */
+/* ------------------------------------------------------------------ */
+
+static void draw_stat_row(ServerStats *s) {
+    float sy   = STAT_Y;
+    float sh   = STAT_H - GAP;
+    int   n    = 4;
+    float sw   = (g_win_w - PAD*2 - GAP*(n-1)) / n;
+
+    typedef struct { const char *label; int value; Color3 col; } Stat;
+    Stat stats[4] = {
+        { "connections",  s->active_connections, C_WHITE  },
+        { "updates sent", s->updates_sent,       C_ORANGE },
+        { "up to date",   s->up_to_date_count,   C_GREEN  },
+        { "threads used", s->pool_size,           C_LIME   },
     };
-    int nb = 5;
-    float badge_h  = hh * 0.38f;
-    float badge_y  = hy + 4.0f;
-    float total_bw = hw - PAD * 2;
-    float bw       = total_bw / nb;
 
-    for (int i = 0; i < nb; i++) {
-        float bx = PAD + i * bw;
-        float bw2 = bw - 6.0f;
+    for (int i = 0; i < n; i++) {
+        float sx = PAD + i * (sw + GAP);
 
-        /* tinted background */
-        glColor4f(badges[i].col.r, badges[i].col.g, badges[i].col.b, 0.15f);
-        fill_rect(bx, badge_y, bw2, badge_h);
+        /* Card background */
+        set_color3(C_CARD);
+        fill_rounded(sx, sy, sw, sh, R_CARD);
 
-        /* border */
-        set_color(badges[i].col);
-        glLineWidth(1.2f);
-        stroke_rect(bx, badge_y, bw2, badge_h);
+        /* Label */
+        set_color3(C_MUTED);
+        draw_str(sx + PAD, sy + sh * 0.82f, stats[i].label, GLUT_BITMAP_HELVETICA_10);
 
-        /* label + value */
-        char buf[40];
-        snprintf(buf, sizeof(buf), "%s: %d", badges[i].label, badges[i].value);
-        float tx = bx + (bw2 - str_width(buf, GLUT_BITMAP_HELVETICA_12)) / 2.0f;
-        draw_str(tx, badge_y + badge_h * 0.28f, buf, GLUT_BITMAP_HELVETICA_12);
+        /* Value — big number */
+        char vbuf[16];
+        snprintf(vbuf, sizeof(vbuf), "%d", stats[i].value);
+        set_color3(stats[i].col);
+        draw_str(sx + PAD, sy + sh * 0.40f, vbuf, GLUT_BITMAP_HELVETICA_18);
     }
 }
 
 /* ------------------------------------------------------------------ */
-/*  THREAD POOL PANEL                                                   */
+/*  ACTIVE CLIENTS panel                                                */
 /* ------------------------------------------------------------------ */
 
-static void draw_thread_panel(ServerStats *s) {
-    set_color(C_PANEL);
-    fill_rect(TP_X, TP_Y, TP_W, TP_H);
-    set_color(C_BORDER);
-    stroke_rect(TP_X, TP_Y, TP_W, TP_H);
+static void draw_active_clients(ServerStats *s) {
+    /* Panel card */
+    set_color3(C_CARD);
+    fill_rounded(LP_X, LP_Y, LP_W, LP_H, R_CARD);
 
-    /* section title */
-    float title_y = TP_Y + TP_H - HDR_H * 0.45f;
-    set_color(C_ACCENT);
-    draw_str(TP_X + PAD, title_y, "THREAD POOL", GLUT_BITMAP_HELVETICA_12);
+    /* Section header */
+    float hline_y = LP_Y + LP_H - 30.0f;
+    set_color3(C_WHITE);
+    draw_str(LP_X + PAD, LP_Y + LP_H - 18.0f, "Active clients", GLUT_BITMAP_HELVETICA_12);
+    draw_hline(LP_X + PAD, hline_y, LP_W - PAD*2);
 
-    int active = 0;
-    int n = s->pool_size;
-    if (n < 1) n = 1;
-    if (n > MAX_THREADS) n = MAX_THREADS;
-    for (int i = 0; i < n; i++)
-        if (s->threads[i].state != THREAD_IDLE) active++;
-
-    char subtitle[32];
-    snprintf(subtitle, sizeof(subtitle), "%d / %d busy", active, n);
-    float sw = (float)str_width(subtitle, GLUT_BITMAP_HELVETICA_12);
-    set_color(C_GREY);
-    draw_str(TP_X + TP_W - sw - PAD, title_y, subtitle, GLUT_BITMAP_HELVETICA_12);
-
-    /* legend row */
-    float leg_h   = 12.0f;
-    float leg_y   = TP_Y + PAD + 2.0f;
-    float leg_x   = TP_X + PAD;
-    Color3 lcols[] = {C_IDLE, C_AUTH, C_VERSION, C_TRANSFER, C_DONE};
-    const char *llbl[] = {"IDLE","AUTH","VERSION","TRANSFER","DONE"};
-    float leg_spacing = (TP_W - PAD*2) / 5.0f;
-    for (int i = 0; i < 5; i++) {
-        set_color(lcols[i]);
-        fill_rect(leg_x + i*leg_spacing, leg_y, leg_h, leg_h);
-        set_color(C_GREY);
-        draw_str(leg_x + i*leg_spacing + leg_h + 3, leg_y + 1,
-                 llbl[i], GLUT_BITMAP_HELVETICA_10);
+    /* Count active threads */
+    int active_count = 0;
+    for (int i = 0; i < s->pool_size && i < MAX_THREADS; i++) {
+        if (s->threads[i].state != THREAD_IDLE &&
+            s->threads[i].client_ip[0] != '\0') {
+            active_count++;
+        }
     }
 
-    /* rows area */
-    float rows_top = TP_Y + TP_H - HDR_H * 0.45f - 6.0f;
-    float rows_bot = leg_y + leg_h + 4.0f;
-    float rows_h   = rows_top - rows_bot;
-    float row_h    = rows_h / (float)n;
-    float bar_h    = row_h * 0.52f;
-    float label_w  = 36.0f;
-    float bar_x    = TP_X + label_w + PAD*2;
-    float bar_w    = TP_W - label_w - PAD*3;
+    if (active_count == 0) {
+        set_color3(C_MUTED);
+        const char *msg = "No active clients";
+        float mx = LP_X + (LP_W - str_width(msg, GLUT_BITMAP_HELVETICA_12)) / 2.0f;
+        draw_str(mx, LP_Y + LP_H / 2.0f, msg, GLUT_BITMAP_HELVETICA_12);
+        return;
+    }
 
-    for (int i = 0; i < n; i++) {
-        ThreadInfo *t    = &s->threads[i];
-        /* draw from top downward so T00 is at top */
-        float row_top    = rows_top - i * row_h;
-        float y_center   = row_top - row_h / 2.0f;
+    /* Available height for client cards */
+    float avail_h  = LP_H - 36.0f;
+    float card_h   = 70.0f;
+    float card_gap = 6.0f;
+    int   max_show = (int)(avail_h / (card_h + card_gap));
+    if (max_show < 1) max_show = 1;
 
-        /* row background */
-        set_color(C_HEADER);
-        fill_rect(TP_X + 2, y_center - bar_h/2 - 2, TP_W - 4, bar_h + 4);
+    int shown = 0;
+    for (int i = 0; i < s->pool_size && i < MAX_THREADS && shown < max_show; i++) {
+        ThreadInfo *t = &s->threads[i];
+        if (t->state == THREAD_IDLE || t->client_ip[0] == '\0') continue;
 
-        /* thread label */
-        char lbl[8];
-        snprintf(lbl, sizeof(lbl), "T%02d", i);
-        set_color(C_GREY);
-        draw_str(TP_X + PAD, y_center - 5, lbl, GLUT_BITMAP_HELVETICA_12);
+        float cy = LP_Y + LP_H - 38.0f - (shown + 1) * (card_h + card_gap);
+        if (cy < LP_Y + PAD) break;
 
-        /* track */
-        set_color(C_IDLE);
-        fill_rect(bar_x, y_center - bar_h/2, bar_w, bar_h);
+        float cx = LP_X + PAD;
+        float cw = LP_W - PAD*2;
 
-        /* fill */
-        Color3 col = thread_color(t->state);
-        if (t->state == THREAD_IDLE) {
-            float pulse = 0.03f * sinf((float)time(NULL)*1.5f + i);
-            glColor3f(col.r+pulse, col.g+pulse, col.b+pulse);
-        } else {
-            set_color(col);
-        }
-        float fill = (t->state == THREAD_TRANSFERRING) ? t->progress
-                   : (t->state == THREAD_IDLE)         ? 0.05f
-                   :                                     1.0f;
-        fill_rect(bar_x, y_center - bar_h/2, bar_w * fill, bar_h);
+        /* Inner client card */
+        set_color3(C_CARD2);
+        fill_rounded(cx, cy, cw, card_h, 6);
 
-        /* state text inside bar */
-        set_color(C_WHITE);
-        draw_str(bar_x + 4, y_center - 5,
-                 thread_state_str(t->state), GLUT_BITMAP_HELVETICA_10);
+        /* IP address */
+        set_color3(C_WHITE);
+        draw_str(cx + PAD, cy + card_h - 16.0f, t->client_ip, GLUT_BITMAP_HELVETICA_12);
 
-        /* progress % for transfers */
-        if (t->state == THREAD_TRANSFERRING) {
+        /* Version pill */
+        char ver_buf[16];
+        uint32_t cv = g_slot_version[i];
+        snprintf(ver_buf, sizeof(ver_buf), "v%u.%u", cv / 10, cv % 10);
+        if (cv == 0) snprintf(ver_buf, sizeof(ver_buf), "v?.?");
+        Color3 vcol = (t->state == THREAD_DONE) ? C_GREEN : C_ORANGE;
+        float pill_x = cx + PAD + (float)str_width(t->client_ip, GLUT_BITMAP_HELVETICA_12) + 8;
+        draw_pill(pill_x, cy + card_h - 20.0f, 14, ver_buf,
+                  vcol, vcol, 0.18f, GLUT_BITMAP_HELVETICA_10);
+
+        /* Status badge — right aligned */
+        const char *sts = status_badge_str(t->state);
+        Color3 scol     = status_badge_color(t->state);
+        float sbw       = (float)str_width(sts, GLUT_BITMAP_HELVETICA_10) + 14;
+        draw_pill(cx + cw - sbw - PAD, cy + card_h - 20.0f, 14, sts,
+                  scol, scol, 0.18f, GLUT_BITMAP_HELVETICA_10);
+
+        /* Progress bar */
+        float pbx = cx + PAD, pby = cy + card_h * 0.44f;
+        float pbw = cw - PAD*2, pbh = 6.0f;
+        float prog = (t->state == THREAD_TRANSFERRING) ? t->progress
+                   : (t->state == THREAD_DONE)         ? 1.0f
+                   :                                     0.0f;
+        Color3 pcol = (t->state == THREAD_DONE) ? C_GREEN : C_ORANGE;
+        draw_progress_bar(pbx, pby, pbw, pbh, prog, pcol);
+
+        /* Percent text */
+        if (t->state == THREAD_TRANSFERRING || t->state == THREAD_DONE) {
             char pct[8];
-            snprintf(pct, sizeof(pct), "%d%%", (int)(t->progress*100));
-            float px = bar_x + bar_w * fill + 3;
-            if (px + 28 < bar_x + bar_w)
-                draw_str(px, y_center - 5, pct, GLUT_BITMAP_HELVETICA_10);
+            if (t->state == THREAD_DONE) snprintf(pct, sizeof(pct), "--");
+            else snprintf(pct, sizeof(pct), "%d%%", (int)(prog * 100));
+            set_color3(C_MUTED);
+            draw_str(cx + cw - (float)str_width(pct, GLUT_BITMAP_HELVETICA_10) - PAD,
+                     pby + 2, pct, GLUT_BITMAP_HELVETICA_10);
         }
 
-        /* client IP right-aligned */
-        if (t->state != THREAD_IDLE && t->client_ip[0]) {
-            float ipw = (float)str_width(t->client_ip, GLUT_BITMAP_HELVETICA_10);
-            set_color(C_GREY);
-            draw_str(bar_x + bar_w - ipw - 2, y_center - 5,
-                     t->client_ip, GLUT_BITMAP_HELVETICA_10);
+        /* Thread + filename */
+        char thread_str[64];
+        if (t->state == THREAD_TRANSFERRING || t->state == THREAD_DONE) {
+            snprintf(thread_str, sizeof(thread_str), "thread 0x%04x · update_v2.0.pkg",
+                     (unsigned)(i * 0x1000 + 0xf3a));
+        } else {
+            snprintf(thread_str, sizeof(thread_str), "thread 0x%04x · %s",
+                     (unsigned)(i * 0x1000 + 0xf3a), status_badge_str(t->state));
         }
+        set_color3(C_DIM);
+        draw_str(cx + PAD, cy + 6.0f, thread_str, GLUT_BITMAP_HELVETICA_10);
 
-        /* bar border */
-        set_color(C_BORDER);
-        glLineWidth(0.8f);
-        stroke_rect(bar_x, y_center - bar_h/2, bar_w, bar_h);
+        shown++;
     }
 }
 
 /* ------------------------------------------------------------------ */
-/*  CONNECTION TIMELINE                                                 */
+/*  EVENT LOG panel                                                     */
 /* ------------------------------------------------------------------ */
 
-static void draw_timeline(ServerStats *s) {
-    set_color(C_PANEL);
-    fill_rect(TL_X, TL_Y, TL_W, TL_H);
-    set_color(C_BORDER);
-    stroke_rect(TL_X, TL_Y, TL_W, TL_H);
-
-    float title_y = TL_Y + TL_H - HDR_H * 0.45f;
-    set_color(C_ACCENT);
-    draw_str(TL_X + PAD, title_y,
-             "CONNECTIONS / SECOND  (last 60 s)", GLUT_BITMAP_HELVETICA_12);
-
-    float ix = TL_X + 32.0f;
-    float iy = TL_Y + PAD + 16.0f;
-    float iw = TL_W - 40.0f;
-    float ih = TL_H - HDR_H*0.45f - PAD*2 - 16.0f;
-
-    /* find max */
-    int max_val = 1;
-    for (int i = 0; i < TIMELINE_LEN; i++)
-        if (s->timeline[i] > max_val) max_val = s->timeline[i];
-
-    /* grid lines */
-    glLineWidth(0.5f);
-    set_color(C_BORDER);
-    for (int g = 1; g <= 4; g++) {
-        float gy = iy + ih * g / 4.0f;
-        glBegin(GL_LINES);
-          glVertex2f(ix, gy); glVertex2f(ix+iw, gy);
-        glEnd();
-        char buf[16];
-        snprintf(buf, sizeof(buf), "%d", max_val*(4-g)/4);
-        set_color(C_GREY);
-        draw_str(TL_X + 4, gy - 5, buf, GLUT_BITMAP_HELVETICA_10);
+static const char *ev_type_str(EvType t) {
+    switch(t) {
+        case EV_INFO: return "INFO";
+        case EV_CONN: return "CONN";
+        case EV_UPDT: return "UPDT";
+        case EV_OK:   return "OK";
+        case EV_DONE: return "DONE";
+        case EV_WARN: return "WARN";
     }
+    return "INFO";
+}
 
-    /* bars */
-    float bw = iw / (float)TIMELINE_LEN;
-    for (int i = 0; i < TIMELINE_LEN; i++) {
-        int idx = (s->timeline_head + i) % TIMELINE_LEN;
-        float val = (float)s->timeline[idx];
-        float bh  = (val / max_val) * ih;
-        float bx  = ix + i * bw;
-        float t   = val / (float)max_val;
-        glColor3f(0.25f + t*0.10f, 0.55f + t*0.35f, 0.55f + t*0.10f);
-        fill_rect(bx+1, iy, bw-2, bh);
+static Color3 ev_type_color(EvType t) {
+    switch(t) {
+        case EV_INFO: return C_BLUE;
+        case EV_CONN: return C_BLUE;
+        case EV_UPDT: return C_ORANGE;
+        case EV_OK:   return C_GREEN;
+        case EV_DONE: return C_GREEN;
+        case EV_WARN: return C_WARN;
     }
+    return C_MUTED;
+}
 
-    /* axes */
-    set_color(C_BORDER);
-    glLineWidth(1.0f);
-    glBegin(GL_LINES);
-      glVertex2f(ix, iy); glVertex2f(ix, iy+ih);
-      glVertex2f(ix, iy); glVertex2f(ix+iw, iy);
-    glEnd();
+static void draw_event_log(void) {
+    /* Panel card */
+    set_color3(C_CARD);
+    fill_rounded(RP_X, RP_Y, RP_W, RP_H, R_CARD);
 
-    /* x labels */
-    const char *xlbl[] = {"-60s","-45s","-30s","-15s","now"};
-    float xpos[]       = {0.0f, 0.25f, 0.50f, 0.75f, 1.0f};
-    for (int i = 0; i < 5; i++) {
-        set_color(C_GREY);
-        float lx = ix + xpos[i]*iw - str_width(xlbl[i],GLUT_BITMAP_HELVETICA_10)/2.0f;
-        draw_str(lx, iy - 14, xlbl[i], GLUT_BITMAP_HELVETICA_10);
+    /* Section header */
+    float hline_y = RP_Y + RP_H - 30.0f;
+    set_color3(C_WHITE);
+    draw_str(RP_X + PAD, RP_Y + RP_H - 18.0f, "Event log", GLUT_BITMAP_HELVETICA_12);
+    draw_hline(RP_X + PAD, hline_y, RP_W - PAD*2);
+
+    float avail_h  = RP_H - 36.0f;
+    float row_h    = 22.0f;
+    int   max_rows = (int)(avail_h / row_h);
+    if (max_rows < 1) max_rows = 1;
+
+    pthread_mutex_lock(&g_ev_mutex);
+    int total = (g_ev_count < max_rows) ? g_ev_count : max_rows;
+    for (int i = 0; i < total; i++) {
+        /* Newest event first: index = (g_ev_head - 1 - i + EV_MAX) % EV_MAX */
+        int idx = (g_ev_head - 1 - i + EV_MAX * 2) % EV_MAX;
+        LogEvent *ev = &g_events[idx];
+
+        float ry = RP_Y + RP_H - 38.0f - i * row_h;
+        if (ry < RP_Y + PAD) break;
+
+        float rx = RP_X + PAD;
+
+        /* Timestamp */
+        set_color3(C_MUTED);
+        draw_str(rx, ry, ev->time_str, GLUT_BITMAP_HELVETICA_10);
+        rx += 52.0f;
+
+        /* Type badge */
+        Color3 tc = ev_type_color(ev->type);
+        draw_pill(rx, ry - 2, 14, ev_type_str(ev->type),
+                  tc, tc, 0.18f, GLUT_BITMAP_HELVETICA_10);
+        rx += (float)str_width(ev_type_str(ev->type), GLUT_BITMAP_HELVETICA_10) + 22;
+
+        /* Message — clipped to panel width */
+        set_color3(C_WHITE);
+        char mbuf[EV_MSG];
+        strncpy(mbuf, ev->msg, EV_MSG-1);
+        mbuf[EV_MSG-1] = '\0';
+        float max_w = RP_X + RP_W - rx - PAD;
+        while (strlen(mbuf) > 4 && (float)str_width(mbuf, GLUT_BITMAP_HELVETICA_10) > max_w)
+            mbuf[strlen(mbuf)-1] = '\0';
+        draw_str(rx, ry, mbuf, GLUT_BITMAP_HELVETICA_10);
+
+        /* Separator */
+        if (i < total - 1)
+            draw_hline(RP_X + PAD, ry - 4, RP_W - PAD*2);
     }
+    pthread_mutex_unlock(&g_ev_mutex);
 }
 
 /* ------------------------------------------------------------------ */
-/*  LIVE LOG FEED                                                       */
+/*  CLIENT VIEW panel (focused client detail)                          */
 /* ------------------------------------------------------------------ */
 
-static void draw_log_feed(ServerStats *s) {
-    float lx = LG_X, ly = LG_Y, lw = LG_W, lh = LOG_H - PAD;
-
-    set_color(C_PANEL);
-    fill_rect(lx, ly, lw, lh);
-    set_color(C_BORDER);
-    stroke_rect(lx, ly, lw, lh);
-
-    float title_y = ly + lh - HDR_H*0.45f;
-    set_color(C_ACCENT);
-    draw_str(lx + PAD, title_y, "LIVE LOG FEED", GLUT_BITMAP_HELVETICA_12);
-
-    int n = s->log_feed_count;
-    if (n > LOG_FEED_LINES) n = LOG_FEED_LINES;
-
-    /* distribute lines evenly inside the feed area */
-    float feed_top = title_y - 6.0f;
-    float feed_bot = ly + 4.0f;
-    float avail    = feed_top - feed_bot;
-    float line_h   = (LOG_FEED_LINES > 0) ? avail / LOG_FEED_LINES : 14.0f;
-
-    for (int i = 0; i < n; i++) {
-        float line_y = feed_top - (i + 1) * line_h + line_h * 0.25f;
-
-        /* highlight newest */
-        if (i == 0) {
-            Color3 hl = {0.18f, 0.22f, 0.32f};
-            set_color(hl);
-            fill_rect(lx+2, line_y - 2, lw-4, line_h);
-        }
-
-        const char *line = s->log_feed[i];
-        if      (strstr(line, "ERROR"))             set_color(C_WARN);
-        else if (strstr(line, "WARN"))              set_color(C_AUTH);
-        else if (strstr(line, "Transfer complete")
-              || strstr(line, "Update saved"))      set_color(C_TRANSFER);
-        else if (strstr(line, "Auth accepted"))     set_color(C_VERSION);
-        else                                        set_color(C_GREY);
-
-        /* truncate to fit width */
-        char buf[LOG_LINE_LEN];
-        strncpy(buf, line, LOG_LINE_LEN-1);
-        buf[LOG_LINE_LEN-1] = '\0';
-        int len = (int)strlen(buf);
-        if (len > 0 && buf[len-1] == '\n') buf[len-1] = '\0';
-
-        /* clip string to panel width */
-        void *font = GLUT_BITMAP_HELVETICA_10;
-        while (strlen(buf) > 4 &&
-               str_width(buf, font) > (int)(lw - PAD*2))
-            buf[strlen(buf)-1] = '\0';
-
-        draw_str(lx + PAD, line_y, buf, font);
+static void draw_client_view(ServerStats *s) {
+    /* Find the most active (transferring/newest) client */
+    int focus = -1;
+    for (int i = 0; i < s->pool_size && i < MAX_THREADS; i++) {
+        if (s->threads[i].state == THREAD_TRANSFERRING) { focus = i; break; }
     }
+    if (focus < 0) {
+        for (int i = 0; i < s->pool_size && i < MAX_THREADS; i++) {
+            if (s->threads[i].state != THREAD_IDLE && s->threads[i].client_ip[0]) {
+                focus = i; break;
+            }
+        }
+    }
+
+    /* Panel card */
+    set_color3(C_CARD);
+    fill_rounded(CV_X, CV_Y, CV_W, CV_H, R_CARD);
+
+    /* Header row */
+    char title[64];
+    if (focus >= 0 && s->threads[focus].client_ip[0])
+        snprintf(title, sizeof(title), "Client view — %s", s->threads[focus].client_ip);
+    else
+        snprintf(title, sizeof(title), "Client view — no active client");
+
+    float hline_y = CV_Y + CV_H - 26.0f;
+    set_color3(C_WHITE);
+    draw_str(CV_X + PAD, CV_Y + CV_H - 14.0f, title, GLUT_BITMAP_HELVETICA_12);
+    draw_hline(CV_X + PAD, hline_y, CV_W - PAD*2);
+
+    if (focus < 0) return;
+
+    ThreadInfo *t = &s->threads[focus];
+
+    /* 4 detail columns */
+    float n    = 4.0f;
+    float cw   = (CV_W - PAD*2 - GAP*(n-1)) / n;
+    float col_y = CV_Y + CV_H * 0.35f;
+
+    /* Column 1: Step */
+    float c1x = CV_X + PAD;
+    set_color3(C_MUTED);
+    draw_str(c1x, CV_Y + CV_H - 38.0f, "step", GLUT_BITMAP_HELVETICA_10);
+    const char *step_line1, *step_line2;
+    switch (t->state) {
+        case THREAD_AUTH:
+            step_line1 = "Authenticating"; step_line2 = "CheckToken() running"; break;
+        case THREAD_VERSION_CHECK:
+            step_line1 = "Checking version"; step_line2 = "VersionCheck() running"; break;
+        case THREAD_TRANSFERRING:
+            step_line1 = "Downloading"; step_line2 = "CheckForUpdate()"; break;
+        case THREAD_DONE:
+            step_line1 = "Complete"; step_line2 = "update saved"; break;
+        default:
+            step_line1 = "Idle"; step_line2 = "waiting"; break;
+    }
+    set_color3(C_WHITE);
+    draw_str(c1x, col_y + 8, step_line1, GLUT_BITMAP_HELVETICA_12);
+    set_color3(C_MUTED);
+    draw_str(c1x, col_y - 8, step_line2, GLUT_BITMAP_HELVETICA_10);
+
+    /* Column 2: Current version */
+    float c2x = c1x + cw + GAP;
+    set_color3(C_MUTED);
+    draw_str(c2x, CV_Y + CV_H - 38.0f, "current version", GLUT_BITMAP_HELVETICA_10);
+    char cv_str[16];
+    uint32_t cv = g_slot_version[focus];
+    if (cv == 0) snprintf(cv_str, sizeof(cv_str), "v?.?");
+    else snprintf(cv_str, sizeof(cv_str), "v%u.%u", cv / 10, cv % 10);
+    Color3 cv_col = (cv == 0) ? C_MUTED : C_ORANGE;
+    set_color3(cv_col);
+    draw_str(c2x, col_y + 8, cv_str, GLUT_BITMAP_HELVETICA_12);
+    set_color3(C_MUTED);
+    draw_str(c2x, col_y - 8, "outdated", GLUT_BITMAP_HELVETICA_10);
+
+    /* Column 3: Target version */
+    float c3x = c2x + cw + GAP;
+    set_color3(C_MUTED);
+    draw_str(c3x, CV_Y + CV_H - 38.0f, "target version", GLUT_BITMAP_HELVETICA_10);
+    set_color3(C_GREEN);
+    draw_str(c3x, col_y + 8, "v2.0", GLUT_BITMAP_HELVETICA_12);
+    set_color3(C_MUTED);
+    draw_str(c3x, col_y - 8, "from server", GLUT_BITMAP_HELVETICA_10);
+
+    /* Column 4: Download progress */
+    float c4x = c3x + cw + GAP;
+    float c4w = CV_X + CV_W - c4x - PAD;
+    set_color3(C_MUTED);
+    draw_str(c4x, CV_Y + CV_H - 38.0f, "download progress", GLUT_BITMAP_HELVETICA_10);
+
+    float prog = (t->state == THREAD_TRANSFERRING) ? t->progress
+               : (t->state == THREAD_DONE)         ? 1.0f
+               :                                     0.0f;
+    Color3 pcol = (t->state == THREAD_DONE) ? C_GREEN : C_ORANGE;
+
+    /* Bar */
+    draw_progress_bar(c4x, col_y + 4, c4w * 0.75f, 7, prog, pcol);
+
+    /* Percent */
+    char pct[12];
+    if (t->state == THREAD_DONE) snprintf(pct, sizeof(pct), "100%%");
+    else snprintf(pct, sizeof(pct), "%d%%", (int)(prog * 100));
+    set_color3(C_WHITE);
+    draw_str(c4x + c4w * 0.75f + 6, col_y + 5, pct, GLUT_BITMAP_HELVETICA_12);
+
+    /* Filename */
+    set_color3(C_MUTED);
+    const char *fname = (t->state == THREAD_DONE) ? "update_v2.0.pkg · saved"
+                                                   : "update_v2.0.pkg · saving locally";
+    draw_str(c4x, col_y - 8, fname, GLUT_BITMAP_HELVETICA_10);
 }
 
 /* ------------------------------------------------------------------ */
@@ -474,7 +718,6 @@ static void draw_log_feed(ServerStats *s) {
 static void cb_display(void) {
     glClear(GL_COLOR_BUFFER_BIT);
 
-    /* reset projection to current window size */
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     gluOrtho2D(0, g_win_w, 0, g_win_h);
@@ -486,11 +729,11 @@ static void cb_display(void) {
     memcpy(&snap, &g_stats, sizeof(snap));
     pthread_mutex_unlock(&g_stats_mutex);
 
-    time_t now = time(NULL);
-    draw_header(&snap, now);
-    draw_thread_panel(&snap);
-    draw_timeline(&snap);
-    draw_log_feed(&snap);
+    draw_header(&snap);
+    draw_stat_row(&snap);
+    draw_active_clients(&snap);
+    draw_event_log();
+    draw_client_view(&snap);
 
     glutSwapBuffers();
 }
@@ -533,14 +776,14 @@ static void *dashboard_thread_fn(void *arg) {
     glutInit(&fake_argc, &fake_argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
     glutInitWindowSize(g_win_w, g_win_h);
-    glutCreateWindow("Update Server -- Live Dashboard");
+    glutCreateWindow("Update Server — Live Dashboard");
 
     glClearColor(C_BG.r, C_BG.g, C_BG.b, 1.0f);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     glutDisplayFunc(cb_display);
-    glutReshapeFunc(cb_reshape);   /* <-- this is what makes it responsive */
+    glutReshapeFunc(cb_reshape);
     glutTimerFunc(50, cb_timer, 0);
     glutMainLoop();
     return NULL;
@@ -556,6 +799,7 @@ void dashboard_init(int pool_size, const char *log_path) {
     g_stats.pool_size  = pool_size;
     g_stats.start_time = time(NULL);
     pthread_mutex_unlock(&g_stats_mutex);
+    memset(g_slot_version, 0, sizeof(g_slot_version));
     g_pool_size = pool_size;
     g_log_path  = log_path;
 }
@@ -578,15 +822,10 @@ void dashboard_set_thread(int slot, ThreadState state, float progress,
     pthread_mutex_unlock(&g_stats_mutex);
 }
 
-void dashboard_push_log(const char *line) {
-    pthread_mutex_lock(&g_stats_mutex);
-    for (int i = LOG_FEED_LINES-1; i > 0; i--)
-        memcpy(g_stats.log_feed[i], g_stats.log_feed[i-1], LOG_LINE_LEN);
-    strncpy(g_stats.log_feed[0], line, LOG_LINE_LEN-1);
-    g_stats.log_feed[0][LOG_LINE_LEN-1] = '\0';
-    if (g_stats.log_feed_count < LOG_FEED_LINES)
-        g_stats.log_feed_count++;
-    pthread_mutex_unlock(&g_stats_mutex);
+/* Extended: also record client version for display */
+void dashboard_set_thread_version(int slot, uint32_t client_version) {
+    if (slot < 0 || slot >= MAX_THREADS) return;
+    g_slot_version[slot] = client_version;
 }
 
 void dashboard_on_connect(void) {

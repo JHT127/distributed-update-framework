@@ -111,6 +111,9 @@ void handle_client(void *arg) {
     logger_write(LOG_INFO, tid, client_ip, "[SERVER] Client version: %u, resume offset: %u",
                  req.version, req.resume_offset);
 
+    /* Record client version so the dashboard can display it */
+    dashboard_set_thread_version(slot, req.version);
+
     uint32_t latest = version_store_get_latest();
 
     UpdateResponse resp;

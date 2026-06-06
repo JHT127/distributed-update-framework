@@ -77,6 +77,9 @@ void dashboard_start(void);
 void dashboard_set_thread(int slot, ThreadState state, float progress,
                           const char *ip, uint32_t total, uint32_t sent);
 
+/* Record the client's reported version for the slot (call after version check). */
+void dashboard_set_thread_version(int slot, uint32_t client_version);
+
 /* Called from logger_write() hook to push a line into the log feed. */
 void dashboard_push_log(const char *line);
 
