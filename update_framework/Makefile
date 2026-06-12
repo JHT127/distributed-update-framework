@@ -125,15 +125,70 @@ test-future: $(BINDIR)/client config/client_future.conf
 	@echo "[TC9] Future version (v99) — server treats it as up-to-date, no crash"
 	./$(BINDIR)/client config/client_future.conf
 
-# DEMO — fires TC1 + TC2 + TC5 all at once: all dashboard panels active simultaneously
-test-demo: $(BINDIR)/client config/client_uptodate.conf config/client_badauth.conf
-	@echo "[DEMO] All scenarios at once — all panels and badges updating simultaneously"
+
+
+
+
+# DEMO — TC1 → TC2 → TC5 → TC9 → TC4 → TC3 → TC8 sequentially
+test-demo: $(BINDIR)/client config/client_uptodate.conf config/client_badauth.conf config/client_future.conf
+	@echo ""; echo "========================================"
+	@echo "[DEMO] TC1 — Single outdated client"
+	@echo "========================================"
 	@rm -f /tmp/updates/update_v2.pkg
 	@dd if=/dev/urandom of=update_packages/update_v2.pkg bs=1M count=10 2>/dev/null
-	@for i in 1 2 3 4; do ./$(BINDIR)/client config/client.conf & done
-	@for i in 1 2;     do ./$(BINDIR)/client config/client_uptodate.conf & done
-	@./$(BINDIR)/client config/client_badauth.conf &
+	./$(BINDIR)/client config/client.conf
+
+	@echo ""; sleep 2
+	@echo "========================================"
+	@echo "[DEMO] TC2 — Single up-to-date client"
+	@echo "========================================"
+	./$(BINDIR)/client config/client_uptodate.conf
+
+	@echo ""; sleep 2
+	@echo "========================================"
+	@echo "[DEMO] TC5 — Bad auth token"
+	@echo "========================================"
+	./$(BINDIR)/client config/client_badauth.conf
+
+	@echo ""; sleep 2
+	@echo "========================================"
+	@echo "[DEMO] TC9 — Future version (v99)"
+	@echo "========================================"
+	./$(BINDIR)/client config/client_future.conf
+
+	@echo ""; sleep 2
+	@echo "========================================"
+	@echo "[DEMO] TC4 — Mixed: 3 outdated + 3 up-to-date simultaneously"
+	@echo "========================================"
+	@rm -f /tmp/updates/update_v2.pkg
+	@dd if=/dev/urandom of=update_packages/update_v2.pkg bs=1M count=10 2>/dev/null
+	@for i in 1 2 3; do ./$(BINDIR)/client config/client.conf & done
+	@for i in 1 2 3; do ./$(BINDIR)/client config/client_uptodate.conf & done
 	@wait
+
+	@echo ""; sleep 2
+	@echo "========================================"
+	@echo "[DEMO] TC3 — 8 simultaneous outdated clients"
+	@echo "========================================"
+	@rm -f /tmp/updates/update_v2.pkg
+	@dd if=/dev/urandom of=update_packages/update_v2.pkg bs=1M count=10 2>/dev/null
+	@for i in 1 2 3 4 5 6 7 8; do ./$(BINDIR)/client config/client.conf & done; wait
+
+	@echo ""; sleep 2
+	@echo "========================================"
+	@echo "[DEMO] TC8 — Pool exhaustion (20 clients, 4 threads)"
+	@echo "========================================"
+	@echo "      NOTE: restart server with config/server_poolexhaust.conf now"
+	@sleep 5
+	@dd if=/dev/urandom of=update_packages/update_v2.pkg bs=1M count=10 2>/dev/null
+	@for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do \
+		mkdir -p /tmp/updates/client$$i && \
+		DOWNLOAD_DIR=/tmp/updates/client$$i ./$(BINDIR)/client config/client.conf & \
+	done; wait
+
+	@echo ""
+	@echo "[DEMO] All test cases complete."
+
 
 # ═══════════════════════════════════════════════════════════════════════
 #  DIRECTORIES
