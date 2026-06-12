@@ -909,7 +909,7 @@ static void cb_timer(int val)
         pthread_mutex_unlock(&g_stats_mutex);
     }
     glutPostRedisplay();
-    glutTimerFunc(50, cb_timer, val);
+    glutTimerFunc(200, cb_timer, val);
 }
 
 /* ------------------------------------------------------------------ */
@@ -932,7 +932,7 @@ static void *dashboard_thread_fn(void *arg)
 
     glutDisplayFunc(cb_display);
     glutReshapeFunc(cb_reshape);
-    glutTimerFunc(50, cb_timer, 0);
+    glutTimerFunc(200, cb_timer, 0);
     glutMainLoop();
     return NULL;
 }

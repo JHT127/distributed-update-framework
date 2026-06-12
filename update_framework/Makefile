@@ -100,7 +100,7 @@ test-resume: $(BINDIR)/client
 	@echo "[TC6] Resume test — start download, then kill+restart the server mid-transfer"
 	@echo "      The client will retry and resume from where it left off"
 	@rm -f /tmp/updates/update_v2.pkg
-	@dd if=/dev/urandom of=update_packages/update_v2.pkg bs=1M count=20 2>/dev/null
+	@dd if=/dev/urandom of=update_packages/update_v2.pkg bs=1M count=200 2>/dev/null
 	./$(BINDIR)/client config/client.conf
 
 # TC7 — large file: 50 MB so the orange progress bar fills slowly with live %
@@ -113,9 +113,11 @@ test-largefile: $(BINDIR)/client
 # TC8 — pool exhaustion: 20 clients on 4 threads, rest queue up visibly
 test-poolexhaust: $(BINDIR)/client
 	@echo "[TC8] Pool exhaustion — 20 clients on 4 threads, watch queue drain one by one"
-	@echo "      NOTE: restart server with THREAD_POOL_SIZE=4 in config/server.conf first"
+	@echo "      NOTE: run the server with config/server_poolexhaust.conf first"
+	@dd if=/dev/urandom of=update_packages/update_v2.pkg bs=1M count=10 2>/dev/null
 	@for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do \
-		./$(BINDIR)/client config/client.conf & \
+		mkdir -p /tmp/updates/client$$i && \
+		DOWNLOAD_DIR=/tmp/updates/client$$i ./$(BINDIR)/client config/client.conf & \
 	done; wait
 
 # TC9 — future version (v99): server says up-to-date, no crash, UP-TO-DATE badge +1
