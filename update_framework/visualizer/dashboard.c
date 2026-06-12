@@ -439,6 +439,13 @@ static void draw_stat_row(ServerStats *s)
     int n = 4;
     float sw = (g_win_w - PAD * 2 - GAP * (n - 1)) / n;
 
+    int busy_threads = 0;
+    for (int i = 0; i < s->pool_size && i < MAX_THREADS; i++)
+    {
+        if (s->threads[i].state != THREAD_IDLE && s->threads[i].client_ip[0] != '\0')
+            busy_threads++;
+    }
+
     typedef struct
     {
         const char *label;
@@ -449,7 +456,7 @@ static void draw_stat_row(ServerStats *s)
         {"connections", s->active_connections, C_WHITE},
         {"updates sent", s->updates_sent, C_ORANGE},
         {"up to date", s->up_to_date_count, C_GREEN},
-        {"threads used", s->pool_size, C_LIME},
+        {"threads used", busy_threads, C_LIME},
     };
 
     for (int i = 0; i < n; i++)
@@ -465,8 +472,11 @@ static void draw_stat_row(ServerStats *s)
         draw_str(sx + PAD, sy + sh * 0.82f, stats[i].label, GLUT_BITMAP_HELVETICA_10);
 
         /* Value — big number */
-        char vbuf[16];
-        snprintf(vbuf, sizeof(vbuf), "%d", stats[i].value);
+        char vbuf[32];
+        if (i == n - 1)
+            snprintf(vbuf, sizeof(vbuf), "%d / %d", busy_threads, s->pool_size);
+        else
+            snprintf(vbuf, sizeof(vbuf), "%d", stats[i].value);
         set_color3(stats[i].col);
         draw_str(sx + PAD, sy + sh * 0.40f, vbuf, GLUT_BITMAP_HELVETICA_18);
     }
