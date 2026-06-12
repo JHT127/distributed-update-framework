@@ -59,6 +59,11 @@ typedef struct
 
     /* counts new connections in the current second — flushed to timeline each tick */
     int connections_this_second;
+
+    /* currently active test scenario from the Makefile test targets */
+    char current_test_number[16];
+    char current_test_name[64];
+    char current_test_label[96];
 } ServerStats;
 
 extern ServerStats g_stats;

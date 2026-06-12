@@ -33,6 +33,25 @@ pthread_mutex_t g_stats_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int g_pool_size = 8;
 static const char *g_log_path = NULL;
 static pthread_t g_dash_tid;
+static const char *g_test_state_path = "/tmp/update_test_state.txt";
+
+typedef struct
+{
+    const char *label;
+    const char *target;
+} TestScenario;
+
+static const TestScenario g_test_scenarios[] = {
+    {"TC1 Outdated", "test-outdated"},
+    {"TC2 Up-to-date", "test-uptodate"},
+    {"TC3 Multi", "test-multi"},
+    {"TC4 Mixed", "test-mixed"},
+    {"TC5 Bad auth", "test-badauth"},
+    {"TC6 Resume", "test-resume"},
+    {"TC7 Large file", "test-largefile"},
+    {"TC8 Queue", "test-poolexhaust"},
+    {"TC9 Future", "test-future"},
+};
 
 static int g_win_w = 1100;
 static int g_win_h = 780;
@@ -387,6 +406,92 @@ static uint32_t g_slot_version[MAX_THREADS];
 /*  HEADER                                                              */
 /* ------------------------------------------------------------------ */
 
+static void refresh_current_test_state(void)
+{
+    char number[32] = "";
+    char name[96] = "";
+    char label[160] = "";
+
+    FILE *fp = fopen(g_test_state_path, "r");
+    if (fp)
+    {
+        if (fgets(number, sizeof(number), fp))
+        {
+            while (number[0] != '\0' && (number[strlen(number) - 1] == '\n' ||
+                                         number[strlen(number) - 1] == '\r'))
+                number[strlen(number) - 1] = '\0';
+        }
+        if (fgets(name, sizeof(name), fp))
+        {
+            while (name[0] != '\0' && (name[strlen(name) - 1] == '\n' ||
+                                       name[strlen(name) - 1] == '\r'))
+                name[strlen(name) - 1] = '\0';
+        }
+        fclose(fp);
+    }
+
+    if (number[0] && name[0])
+        snprintf(label, sizeof(label), "%s — %s", number, name);
+    else if (number[0])
+        snprintf(label, sizeof(label), "%s", number);
+    else if (name[0])
+        snprintf(label, sizeof(label), "%s", name);
+
+    pthread_mutex_lock(&g_stats_mutex);
+    strncpy(g_stats.current_test_number, number, sizeof(g_stats.current_test_number) - 1);
+    g_stats.current_test_number[sizeof(g_stats.current_test_number) - 1] = '\0';
+    strncpy(g_stats.current_test_name, name, sizeof(g_stats.current_test_name) - 1);
+    g_stats.current_test_name[sizeof(g_stats.current_test_name) - 1] = '\0';
+    strncpy(g_stats.current_test_label, label, sizeof(g_stats.current_test_label) - 1);
+    g_stats.current_test_label[sizeof(g_stats.current_test_label) - 1] = '\0';
+    pthread_mutex_unlock(&g_stats_mutex);
+}
+
+static void launch_test_scenario(int index)
+{
+    if (index < 0 || index >= (int)(sizeof(g_test_scenarios) / sizeof(g_test_scenarios[0])))
+        return;
+
+    char cmd[256];
+    snprintf(cmd, sizeof(cmd), "make %s >/tmp/update_test_run.log 2>&1 &",
+             g_test_scenarios[index].target);
+    (void)system(cmd);
+}
+
+static void get_test_button_rect(int index, float *x, float *y, float *w, float *h)
+{
+    const float button_h = 18.0f;
+    const float button_gap = 6.0f;
+    const float button_w = (CV_W - PAD * 2 - GAP * 3) / 4.0f;
+
+    int col = index % 4;
+    int row = index / 4;
+
+    *x = CV_X + PAD + col * (button_w + GAP);
+    *y = CV_Y + CV_H - 54.0f - row * (button_h + button_gap);
+    *w = button_w;
+    *h = button_h;
+}
+
+static void draw_test_buttons(void)
+{
+    set_color3(C_CARD);
+    fill_rounded(CV_X + PAD, CV_Y + CV_H - 90.0f, CV_W - PAD * 2, 72.0f, R_CARD);
+
+    set_color3(C_WHITE);
+    draw_str(CV_X + PAD + 6.0f, CV_Y + CV_H - 72.0f, "Quick test buttons (click to run one scenario)",
+             GLUT_BITMAP_HELVETICA_10);
+
+    for (int i = 0; i < (int)(sizeof(g_test_scenarios) / sizeof(g_test_scenarios[0])); i++)
+    {
+        float bx, by, bw, bh;
+        get_test_button_rect(i, &bx, &by, &bw, &bh);
+
+        draw_pill(bx, by, bh, g_test_scenarios[i].label,
+                  C_WHITE, C_SEP, 0.70f, GLUT_BITMAP_HELVETICA_10);
+    }
+}
+
 static void draw_header(ServerStats *s)
 {
     float hx = 0, hy = g_win_h - HDR_H, hw = g_win_w, hh = HDR_H;
@@ -420,6 +525,14 @@ static void draw_header(ServerStats *s)
     float bx = ix + 24 + str_width("Update server", GLUT_BITMAP_HELVETICA_18) + 12 + (float)str_width(port_str, GLUT_BITMAP_HELVETICA_12) + 8;
     draw_pill(bx, hy + hh * 0.45f, 16, "v2.0 latest",
               C_MUTED, C_SEP, 0.5f, GLUT_BITMAP_HELVETICA_10);
+
+    /* Current test badge */
+    if (s->current_test_label[0] != '\0')
+    {
+        float tx = bx + 70.0f;
+        draw_pill(tx, hy + hh * 0.45f, 16, s->current_test_label,
+                  C_BLUE, C_SEP, 0.45f, GLUT_BITMAP_HELVETICA_10);
+    }
 
     /* Running indicator — right side */
     float rx = hw - PAD - (float)str_width("running", GLUT_BITMAP_HELVETICA_12) - 18;
@@ -717,6 +830,8 @@ static void draw_event_log(void)
 
 static void draw_client_view(ServerStats *s)
 {
+    draw_test_buttons();
+
     /* Find the most active (transferring/newest) client */
     int focus = -1;
     for (int i = 0; i < s->pool_size && i < MAX_THREADS; i++)
@@ -867,6 +982,8 @@ static void cb_display(void)
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
 
+    refresh_current_test_state();
+
     ServerStats snap;
     pthread_mutex_lock(&g_stats_mutex);
     memcpy(&snap, &g_stats, sizeof(snap));
@@ -893,6 +1010,25 @@ static void cb_reshape(int w, int h)
     gluOrtho2D(0, w, 0, h);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
+}
+
+static void cb_mouse(int button, int state, int x, int y)
+{
+    if (button != GLUT_LEFT_BUTTON || state != GLUT_DOWN)
+        return;
+
+    int gl_y = g_win_h - y;
+    for (int i = 0; i < (int)(sizeof(g_test_scenarios) / sizeof(g_test_scenarios[0])); i++)
+    {
+        float bx, by, bw, bh;
+        get_test_button_rect(i, &bx, &by, &bw, &bh);
+
+        if (x >= bx && x <= bx + bw && gl_y >= by && gl_y <= by + bh)
+        {
+            launch_test_scenario(i);
+            break;
+        }
+    }
 }
 
 static void cb_timer(int val)
@@ -932,6 +1068,7 @@ static void *dashboard_thread_fn(void *arg)
 
     glutDisplayFunc(cb_display);
     glutReshapeFunc(cb_reshape);
+    glutMouseFunc(cb_mouse);
     glutTimerFunc(200, cb_timer, 0);
     glutMainLoop();
     return NULL;
@@ -948,6 +1085,7 @@ void dashboard_init(int pool_size, const char *log_path)
     g_stats.pool_size = pool_size;
     g_stats.start_time = time(NULL);
     pthread_mutex_unlock(&g_stats_mutex);
+    refresh_current_test_state();
     memset(g_slot_version, 0, sizeof(g_slot_version));
     g_pool_size = pool_size;
     g_log_path = log_path;
