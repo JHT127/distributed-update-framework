@@ -10,13 +10,14 @@
  * The dashboard thread reads g_stats under the same mutex to draw.
  * --------------------------------------------------------------- */
 
-#define MAX_THREADS     16      /* match THREAD_POOL_SIZE upper bound */
-#define TIMELINE_LEN    60      /* seconds of connection history shown  */
-#define LOG_FEED_LINES  10      /* lines shown in the live log panel    */
-#define LOG_LINE_LEN    128
+#define MAX_THREADS 16    /* match THREAD_POOL_SIZE upper bound */
+#define TIMELINE_LEN 60   /* seconds of connection history shown  */
+#define LOG_FEED_LINES 10 /* lines shown in the live log panel    */
+#define LOG_LINE_LEN 128
 
 /* Per-thread state visible to the dashboard */
-typedef enum {
+typedef enum
+{
     THREAD_IDLE,
     THREAD_AUTH,
     THREAD_VERSION_CHECK,
@@ -24,42 +25,44 @@ typedef enum {
     THREAD_DONE
 } ThreadState;
 
-typedef struct {
+typedef struct
+{
     ThreadState state;
-    float       progress;       /* 0.0 – 1.0 during transfer          */
-    char        client_ip[32];
-    uint32_t    bytes_total;
-    uint32_t    bytes_sent;
+    float progress; /* 0.0 – 1.0 during transfer          */
+    char client_ip[32];
+    uint32_t bytes_total;
+    uint32_t bytes_sent;
 } ThreadInfo;
 
 /* Global stats struct — written by server, read by dashboard */
-typedef struct {
-    int        active_connections;
-    int        total_served;
-    int        updates_sent;
-    int        up_to_date_count;
-    int        auth_failures;
-    int        pool_size;
+typedef struct
+{
+    int active_connections;
+    int total_served;
+    int updates_sent;
+    int up_to_date_count;
+    int auth_failures;
+    int pool_size;
 
-    ThreadInfo threads[MAX_THREADS];   /* index = worker slot 0..pool_size-1 */
+    ThreadInfo threads[MAX_THREADS]; /* index = worker slot 0..pool_size-1 */
 
     /* rolling timeline: connections_per_second[i] = count at second i     */
-    int        timeline[TIMELINE_LEN];
-    int        timeline_head;          /* next slot to write                */
+    int timeline[TIMELINE_LEN];
+    int timeline_head; /* next slot to write                */
 
     /* live log feed — newest entry at index 0                             */
-    char       log_feed[LOG_FEED_LINES][LOG_LINE_LEN];
-    int        log_feed_count;
+    char log_feed[LOG_FEED_LINES][LOG_LINE_LEN];
+    int log_feed_count;
 
     /* server start time for uptime display */
-    time_t     start_time;
+    time_t start_time;
 
     /* counts new connections in the current second — flushed to timeline each tick */
-    int        connections_this_second;
+    int connections_this_second;
 } ServerStats;
 
-extern ServerStats      g_stats;
-extern pthread_mutex_t  g_stats_mutex;
+extern ServerStats g_stats;
+extern pthread_mutex_t g_stats_mutex;
 
 /* -----------------------------------------------------------
  * Call once from server.c after config is loaded.
@@ -86,5 +89,14 @@ void dashboard_push_log(const char *line);
 /* Called when a connection is accepted — increments active + timeline. */
 void dashboard_on_connect(void);
 
+typedef enum
+{
+    DISCONNECT_REASON_NONE = 0,
+    DISCONNECT_REASON_UP_TO_DATE,
+    DISCONNECT_REASON_UPDATE_SENT,
+    DISCONNECT_REASON_AUTH_REJECTED,
+    DISCONNECT_REASON_ERROR
+} DisconnectReason;
+
 /* Called when a connection closes. */
-void dashboard_on_disconnect(int update_was_sent);
+void dashboard_on_disconnect(DisconnectReason reason);

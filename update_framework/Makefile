@@ -85,6 +85,7 @@ test-multi: $(BINDIR)/client
 # TC4 — 4 outdated + 4 up-to-date: UPDATED and UP-TO-DATE badges both increment
 test-mixed: $(BINDIR)/client config/client_uptodate.conf
 	@echo "[TC4] Mixed clients — watch both UPDATED and UP-TO-DATE badges increment"
+	@rm -f /tmp/updates/update_v2.pkg
 	@for i in 1 2 3 4; do ./$(BINDIR)/client config/client.conf & done
 	@for i in 1 2 3 4; do ./$(BINDIR)/client config/client_uptodate.conf & done
 	@wait
