@@ -128,13 +128,26 @@ void dashboard_on_connect(void) {
     pthread_mutex_unlock(&g_stats_mutex);
 }
 
-void dashboard_on_disconnect(int update_was_sent) {
+void dashboard_on_disconnect(DisconnectReason reason) {
     pthread_mutex_lock(&g_stats_mutex);
     if (g_stats.active_connections > 0)
         g_stats.active_connections--;
-    if (update_was_sent)
+
+    switch (reason) {
+    case DISCONNECT_REASON_UPDATE_SENT:
         g_stats.updates_sent++;
-    else
+        break;
+    case DISCONNECT_REASON_UP_TO_DATE:
         g_stats.up_to_date_count++;
+        break;
+    case DISCONNECT_REASON_AUTH_REJECTED:
+        g_stats.auth_failures++;
+        break;
+    case DISCONNECT_REASON_NONE:
+    case DISCONNECT_REASON_ERROR:
+    default:
+        break;
+    }
+
     pthread_mutex_unlock(&g_stats_mutex);
 }
