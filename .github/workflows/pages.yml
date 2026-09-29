@@ -1,4 +1,4 @@
-name: Deploy protocol demo
+name: Deploy update demo
 
 on:
   push:
