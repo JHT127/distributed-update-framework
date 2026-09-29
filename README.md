@@ -1,25 +1,13 @@
 # Distributed Software Update Framework
 
-ENCS4330 — Project 3 | Sockets & POSIX Threads
-
-Client/server system where clients connect, send their version number, and receive the update file if they're outdated. Supports concurrent clients via a thread pool, with auth, checksum verification, and download resume.
-
----
-
-## Build & Run
-
-**Run commands from the repository root.**
-
-# Distributed Software Update Framework
-
 An educational C client/server system for delivering versioned update packages over TCP. It demonstrates POSIX threads, a bounded worker queue, token checks, resumable transfers, checksum verification, and a live OpenGL server dashboard.
 
-[![CI](https://github.com/JHT127/real-time-project-three/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/JHT127/real-time-project-three/actions/workflows/ci.yml)
-[![Live protocol demo](https://img.shields.io/badge/demo-GitHub%20Pages-286f62)](https://jht127.github.io/real-time-project-three/)
+[![CI](https://github.com/JHT127/distributed-update-framework/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/JHT127/distributed-update-framework/actions/workflows/ci.yml)
+[![Live update demo](https://img.shields.io/badge/demo-GitHub%20Pages-286f62)](https://jht127.github.io/distributed-update-framework/)
 
 ## Live Demo
 
-**[Open the interactive protocol demo](https://jht127.github.io/real-time-project-three/)**
+**[Open the Update Delivery Demo](https://jht127.github.io/distributed-update-framework/)**
 
 The Pages demo is a browser-side simulation of the client/server exchange. It does not connect to or host the C server; run the project locally to use the real TCP implementation.
 
