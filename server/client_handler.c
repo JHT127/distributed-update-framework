@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -46,6 +47,22 @@ static int get_slot(void)
     return thread_pool_get_slot();
 }
 
+static int send_all(int fd, const void *buffer, size_t length)
+{
+    const unsigned char *next = buffer;
+    while (length > 0)
+    {
+        ssize_t sent = send(fd, next, length, 0);
+        if (sent < 0 && errno == EINTR)
+            continue;
+        if (sent <= 0)
+            return -1;
+        next += (size_t)sent;
+        length -= (size_t)sent;
+    }
+    return 0;
+}
+
 void handle_client(void *arg)
 {
     int fd = *(int *)arg;
@@ -82,7 +99,7 @@ void handle_client(void *arg)
     if (!version_store_check_token(auth_req.token))
     {
         auth_resp.accepted = 0;
-        send(fd, &auth_resp, sizeof(auth_resp), 0);
+        send_all(fd, &auth_resp, sizeof(auth_resp));
         logger_write(LOG_WARN, tid, client_ip, "[SERVER] Auth REJECTED — token invalid");
 
         dashboard_set_thread(slot, THREAD_IDLE, 0.0f, "", 0, 0);
@@ -92,7 +109,14 @@ void handle_client(void *arg)
     }
 
     auth_resp.accepted = 1;
-    send(fd, &auth_resp, sizeof(auth_resp), 0);
+    if (send_all(fd, &auth_resp, sizeof(auth_resp)) < 0)
+    {
+        logger_write(LOG_WARN, tid, client_ip, "[SERVER] Failed to send AuthResponse");
+        dashboard_set_thread(slot, THREAD_IDLE, 0.0f, "", 0, 0);
+        dashboard_on_disconnect(DISCONNECT_REASON_ERROR);
+        close(fd);
+        return;
+    }
     logger_write(LOG_INFO, tid, client_ip, "[SERVER] Auth accepted");
 
     /* ---- STEP 2: version check ---- */
@@ -125,7 +149,14 @@ void handle_client(void *arg)
     if (!resp.update_available)
     {
         resp.file_size = htonl(0);
-        send(fd, &resp, sizeof(resp), 0);
+        if (send_all(fd, &resp, sizeof(resp)) < 0)
+        {
+            logger_write(LOG_WARN, tid, client_ip, "[SERVER] Failed to send UpdateResponse");
+            dashboard_set_thread(slot, THREAD_IDLE, 0.0f, "", 0, 0);
+            dashboard_on_disconnect(DISCONNECT_REASON_ERROR);
+            close(fd);
+            return;
+        }
         logger_write(LOG_INFO, tid, client_ip, "[SERVER] Client is up to date — no transfer needed");
         dashboard_set_thread(slot, THREAD_DONE, 1.0f, client_ip, 0, 0);
         dashboard_on_disconnect(DISCONNECT_REASON_UP_TO_DATE);
@@ -168,7 +199,14 @@ void handle_client(void *arg)
     resp.file_size = htonl(bytes_to_send);
     strncpy(resp.filename, filepath, MAX_FILENAME - 1);
     strncpy(resp.checksum, checksum, CHECKSUM_LEN);
-    send(fd, &resp, sizeof(resp), 0);
+    if (send_all(fd, &resp, sizeof(resp)) < 0)
+    {
+        logger_write(LOG_WARN, tid, client_ip, "[SERVER] Failed to send UpdateResponse");
+        dashboard_set_thread(slot, THREAD_IDLE, 0.0f, "", 0, 0);
+        dashboard_on_disconnect(DISCONNECT_REASON_ERROR);
+        close(fd);
+        return;
+    }
 
     logger_write(LOG_INFO, tid, client_ip,
                  "[SERVER] Client outdated (latest: %u) — sending %u bytes from offset %u",
@@ -194,16 +232,17 @@ void handle_client(void *arg)
     char buf[4096];
     size_t bytes_read;
     uint32_t total_sent = 0;
+    int transfer_ok = 1;
 
     while ((bytes_read = fread(buf, 1, sizeof(buf), f)) > 0)
     {
-        ssize_t sent = send(fd, buf, bytes_read, 0);
-        if (sent <= 0)
+        if (send_all(fd, buf, bytes_read) < 0)
         {
             logger_write(LOG_WARN, tid, client_ip, "[SERVER] send() failed mid-transfer");
+            transfer_ok = 0;
             break;
         }
-        total_sent += (uint32_t)sent;
+        total_sent += (uint32_t)bytes_read;
 
         /* update progress in dashboard */
         float progress = (bytes_to_send > 0)
@@ -212,15 +251,23 @@ void handle_client(void *arg)
         dashboard_set_thread(slot, THREAD_TRANSFERRING, progress,
                              client_ip, bytes_to_send, total_sent);
     }
+    if (ferror(f))
+        transfer_ok = 0;
     fclose(f);
 
-    logger_write(LOG_INFO, tid, client_ip, "[SERVER] Transfer complete — %u bytes sent", total_sent);
-
-    /* show DONE briefly then go idle */
-    dashboard_set_thread(slot, THREAD_DONE, 1.0f, client_ip, bytes_to_send, total_sent);
-    dashboard_on_disconnect(DISCONNECT_REASON_UPDATE_SENT);
-
-    usleep(600000); /* 0.6 s so operator can see the DONE state */
+    if (transfer_ok)
+    {
+        logger_write(LOG_INFO, tid, client_ip, "[SERVER] Transfer complete — %u bytes sent", total_sent);
+        dashboard_set_thread(slot, THREAD_DONE, 1.0f, client_ip, bytes_to_send, total_sent);
+        dashboard_on_disconnect(DISCONNECT_REASON_UPDATE_SENT);
+        usleep(600000);
+    }
+    else
+    {
+        logger_write(LOG_WARN, tid, client_ip, "[SERVER] Transfer failed after %u bytes", total_sent);
+        dashboard_set_thread(slot, THREAD_IDLE, 0.0f, "", 0, 0);
+        dashboard_on_disconnect(DISCONNECT_REASON_ERROR);
+    }
     dashboard_set_thread(slot, THREAD_IDLE, 0.0f, "", 0, 0);
 
     close(fd);
