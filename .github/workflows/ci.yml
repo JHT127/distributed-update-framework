@@ -1,0 +1,40 @@
+name: Build and test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential libssl-dev libgl1-mesa-dev libglu1-mesa-dev freeglut3-dev
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install openssl
+
+      - name: Build client and server
+        run: make compile
+
+      - name: Run headless dashboard tests
+        run: make test-dashboard
