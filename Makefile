@@ -39,8 +39,12 @@ run-server: $(BINDIR)/server
 run-client: $(BINDIR)/client
 	./$(BINDIR)/client $(CLIENT_CONF)
 
+test-dashboard: $(BINDIR)/test_dashboard_states
+	./$(BINDIR)/test_dashboard_states
+
 clean:
 	rm -rf $(BDIR) $(BINDIR) logs/*.log /tmp/updates/
+	rm -f /tmp/update-v2-pool-test.pkg
 
 # ═══════════════════════════════════════════════════════════════════════
 #  TEST CONFIG FILES  (created once, reused by every test target)
@@ -85,12 +89,11 @@ test-uptodate: $(BINDIR)/client config/client_uptodate.conf
 	./$(BINDIR)/client config/client_uptodate.conf
 
 # TC3 — 8 clients at once: all thread bars light up simultaneously
-#        Uses a fresh copy of the real update package so checksums pass.
+#        Uses the committed update package so checksums pass.
 test-multi: $(BINDIR)/client
 	$(call set_current_test,TC3,8 simultaneous outdated clients)
 	@echo "[TC3] 8 simultaneous outdated clients — watch all thread bars fill at once"
 	@rm -f /tmp/updates/update_v2.pkg
-	@dd if=/dev/urandom of=update_packages/update_v2.pkg bs=1M count=50 2>/dev/null
 	@for i in 1 2 3 4 5 6 7 8; do ./$(BINDIR)/client config/client.conf & done; wait
 
 # TC4 — 4 outdated + 4 up-to-date: UPDATED and UP-TO-DATE badges both increment
@@ -108,13 +111,12 @@ test-badauth: $(BINDIR)/client config/client_badauth.conf
 	@echo "[TC5] Bad auth token — watch AUTH FAIL badge and red WARN in event log"
 	./$(BINDIR)/client config/client_badauth.conf
 
-# TC6 — resume: creates a large file then kill/restart the server mid-transfer
+# TC6 — resume: interrupt a 50 MB transfer, then retry the client
 test-resume: $(BINDIR)/client
 	$(call set_current_test,TC6,Resume test)
 	@echo "[TC6] Resume test — start download, then kill+restart the server mid-transfer"
 	@echo "      The client will retry and resume from where it left off"
 	@rm -f /tmp/updates/update_v2.pkg
-	@dd if=/dev/urandom of=update_packages/update_v2.pkg bs=1M count=200 2>/dev/null
 	./$(BINDIR)/client config/client.conf
 
 # TC7 — large file: 50 MB so the orange progress bar fills slowly with live %
@@ -122,7 +124,6 @@ test-largefile: $(BINDIR)/client
 	$(call set_current_test,TC7,Large file transfer)
 	@echo "[TC7] Large file (50 MB) — watch the progress bar fill slowly with % counter"
 	@rm -f /tmp/updates/update_v2.pkg
-	@dd if=/dev/urandom of=update_packages/update_v2.pkg bs=1M count=50 2>/dev/null
 	./$(BINDIR)/client config/client.conf
 
 # TC8 — pool exhaustion: 20 clients on 4 threads, rest queue up visibly.
@@ -135,7 +136,7 @@ test-poolexhaust: $(BINDIR)/client $(BINDIR)/server
 	@./$(BINDIR)/server $(SERVER_CONF_EXHAUST) &
 	@sleep 1
 	@rm -f /tmp/updates/update_v2.pkg
-	@dd if=/dev/urandom of=update_packages/update_v2.pkg bs=1M count=10 2>/dev/null
+	@dd if=/dev/urandom of=/tmp/update-v2-pool-test.pkg bs=1M count=10 2>/dev/null
 	@for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do \
 		mkdir -p /tmp/updates/client$$i && \
 		DOWNLOAD_DIR=/tmp/updates/client$$i ./$(BINDIR)/client config/client.conf & \
@@ -143,6 +144,7 @@ test-poolexhaust: $(BINDIR)/client $(BINDIR)/server
 	@echo "[TC8] Restoring server with default config"
 	@pkill -f "$(BINDIR)/server" 2>/dev/null || true
 	@sleep 1
+	@rm -f /tmp/update-v2-pool-test.pkg
 	@./$(BINDIR)/server $(SERVER_CONF) &
 	@sleep 1
 
@@ -170,9 +172,7 @@ test-demo: $(BINDIR)/client $(BINDIR)/server \
 	$(call set_current_test,TC-DEMO,Demo sequence)
 	@echo "[DEMO] Running all scenarios sequentially — watch each panel update one at a time"
 
-	@# Build the canonical 50 MB package once; every TC reuses it.
-	@rm -f /tmp/updates/update_v2.pkg
-	@dd if=/dev/urandom of=update_packages/update_v2.pkg bs=1M count=50 2>/dev/null
+	@# Reuse the committed 50 MB package for every scenario.
 
 	@echo ""; echo "[TC1] Outdated client — one thread fills orange then green"
 	$(call set_current_test,TC1,Outdated client)
@@ -261,6 +261,9 @@ $(BDIR)/server.o: server/server.c common/config.h common/protocol.h \
 $(BDIR)/client.o: client/client.c common/config.h common/protocol.h
 	$(CC) $(CFLAGS) $(SSL_INC) -c client/client.c -o $(BDIR)/client.o
 
+$(BINDIR)/test_dashboard_states: tests/test_dashboard_states.c tests/dashboard_stub.c visualizer/dashboard.h | $(BINDIR)
+	$(CC) $(CFLAGS) tests/test_dashboard_states.c tests/dashboard_stub.c -o $@
+
 # ═══════════════════════════════════════════════════════════════════════
 #  LINK
 # ═══════════════════════════════════════════════════════════════════════
@@ -274,6 +277,7 @@ $(BINDIR)/client: $(BDIR)/client.o $(BDIR)/config.o
 	$(CC) $(CFLAGS) $^ -o $@ $(SSL_LIBS)
 
 .PHONY: compile run-server run-client clean \
+	 test-dashboard \
         test-outdated test-uptodate test-multi test-mixed \
         test-badauth test-resume test-largefile test-poolexhaust \
         test-future test-demo
