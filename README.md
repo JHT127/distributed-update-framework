@@ -8,7 +8,7 @@ Client/server system where clients connect, send their version number, and recei
 
 ## Build & Run
 
-**Always run from inside `update_framework/`.**
+**Run commands from the repository root.**
 
 ```bash
 make compile          # build both binaries into bin/
@@ -108,5 +108,5 @@ Run and document each of these:
 ## Notes
 
 - All config values are runtime-loaded — no hardcoded ports, versions, or paths. Change `server.conf` or `client.conf` and rerun without recompiling.
-- The server must be started from `update_framework/` because paths like `logs/server.log` and `update_packages/update_v2.pkg` are relative.
+- The server must be started from the repository root because paths like `logs/server.log` and `update_packages/update_v2.pkg` are relative.
 - MD5 is used for checksums (OpenSSL). Compile requires `-lssl -lcrypto`.
