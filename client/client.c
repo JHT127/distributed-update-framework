@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+#include <signal.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -17,6 +19,20 @@ static char     g_download_dir[256];
 static char     g_auth_token[TOKEN_LEN + 1];
 static int      g_max_retries;
 static int      g_retry_delay;
+
+static int send_all(int fd, const void *buffer, size_t length) {
+    const unsigned char *next = buffer;
+    while (length > 0) {
+        ssize_t sent = send(fd, next, length, 0);
+        if (sent < 0 && errno == EINTR)
+            continue;
+        if (sent <= 0)
+            return -1;
+        next += (size_t)sent;
+        length -= (size_t)sent;
+    }
+    return 0;
+}
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
@@ -79,7 +95,11 @@ static int try_update(void) {
     AuthRequest auth_req;
     memset(&auth_req, 0, sizeof(auth_req));
     strncpy(auth_req.token, g_auth_token, TOKEN_LEN);
-    send(sock_fd, &auth_req, sizeof(auth_req), 0);
+    if (send_all(sock_fd, &auth_req, sizeof(auth_req)) < 0) {
+        fprintf(stderr, "[CLIENT] Failed to send authentication request\n");
+        close(sock_fd);
+        return 0;
+    }
     printf("[CLIENT] Sent auth token\n");
 
     // receive auth response
@@ -96,7 +116,11 @@ static int try_update(void) {
     VersionRequest req;
     req.version       = htonl(getCurrentVersion());
     req.resume_offset = htonl(resume_offset);
-    send(sock_fd, &req, sizeof(req), 0);
+    if (send_all(sock_fd, &req, sizeof(req)) < 0) {
+        fprintf(stderr, "[CLIENT] Failed to send version request\n");
+        close(sock_fd);
+        return 0;
+    }
     printf("[CLIENT] Sent version: %u (resume offset: %u)\n", g_current_version, resume_offset);
 
     // receive response header
@@ -140,7 +164,12 @@ static int try_update(void) {
             close(sock_fd);
             return 0;
         }
-        fwrite(buf, 1, received, out);
+        if (fwrite(buf, 1, (size_t)received, out) != (size_t)received) {
+            fprintf(stderr, "[CLIENT] Failed to write downloaded data\n");
+            fclose(out);
+            close(sock_fd);
+            return 0;
+        }
         remaining -= received;
     }
     fclose(out);
@@ -187,6 +216,7 @@ void CheckForUpdate(void) {
 }
 
 int main(int argc, char *argv[]) {
+    signal(SIGPIPE, SIG_IGN);
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <config_file>\n", argv[0]);
         return 1;
