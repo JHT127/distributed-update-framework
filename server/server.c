@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
@@ -13,6 +14,7 @@
 #include "../visualizer/dashboard.h"  
 
 int main(int argc, char *argv[]) {
+    signal(SIGPIPE, SIG_IGN);
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <config_file>\n", argv[0]);
         return 1;
