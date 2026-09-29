@@ -59,8 +59,8 @@ void handle_client(void *arg)
     else
         strncpy(client_ip, "unknown", sizeof(client_ip));
 
-    int tid = (int)(pthread_self() % 100);
     int slot = get_slot();
+    int tid = slot;
 
     /* ---- STEP 1: authentication ---- */
     dashboard_set_thread(slot, THREAD_AUTH, 0.0f, client_ip, 0, 0);
