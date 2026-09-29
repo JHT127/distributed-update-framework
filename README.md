@@ -10,103 +10,99 @@ Client/server system where clients connect, send their version number, and recei
 
 **Run commands from the repository root.**
 
-```bash
-make compile          # build both binaries into bin/
-make clean            # wipe build, logs, and /tmp/updates/update_v2.pkg
+# Distributed Software Update Framework
 
-./bin/server config/server.conf   # terminal 1
-./bin/client config/client.conf   # terminal 2
+An educational C client/server system for delivering versioned update packages over TCP. It demonstrates POSIX threads, a bounded worker queue, token checks, resumable transfers, checksum verification, and a live OpenGL server dashboard.
+
+[![CI](https://github.com/JHT127/real-time-project-three/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/JHT127/real-time-project-three/actions/workflows/ci.yml)
+[![Live protocol demo](https://img.shields.io/badge/demo-GitHub%20Pages-286f62)](https://jht127.github.io/real-time-project-three/)
+
+## Live Demo
+
+**[Open the interactive protocol demo](https://jht127.github.io/real-time-project-three/)**
+
+The Pages demo is a browser-side simulation of the client/server exchange. It does not connect to or host the C server; run the project locally to use the real TCP implementation.
+
+## Features
+
+- Concurrent client handling with a POSIX thread pool and bounded queue.
+- Token-based authentication using a local tokens file.
+- Version comparison and package transfer from a configurable file path.
+- Resume offsets for interrupted downloads and MD5 checksums for transfer integrity.
+- OpenGL dashboard for connection, worker, transfer, and log activity.
+- Headless dashboard-state tests that run without opening a graphics window.
+
+## Requirements
+
+- Linux or macOS with a C compiler, GNU Make, and POSIX threads.
+- OpenSSL development headers and libraries.
+- OpenGL, GLU, and GLUT development libraries (macOS uses the system OpenGL/GLUT frameworks).
+
+Windows users should build inside WSL or another POSIX environment; the server depends on POSIX sockets and headers.
+
+## Build and Run
+
+Run commands from the repository root. Start the server in one terminal; it opens the OpenGL dashboard in a graphical session. Start the client in another terminal.
+
+```sh
+make compile
+make run-server
 ```
 
----
-
-## File Overview
-
-```
-common/
-  protocol.h          shared message structs (VersionRequest, UpdateResponse, AuthRequest, AuthResponse)
-  config.c/h          parse_config() — reads KEY=VALUE from any .conf file
-
-server/
-  server.c            entry point — loads config, creates socket, accept loop, dispatches to thread pool
-  thread_pool.c/h     fixed-size worker pool with mutex + condition variables; circular task queue
-  client_handler.c/h  handle_client() — auth → version check → file transfer (runs in a pool thread)
-  version_store.c/h   holds latest version, update file path, and valid token list in memory
-  logger.c/h          thread-safe logger — writes timestamped entries to file + stdout
-
-client/
-  client.c            loads config, calls CheckForUpdate() with retry loop
-                      CheckForUpdate → auth → send version+offset → receive file → MD5 verify
-                      getCurrentVersion() returns the version loaded from config
-
-config/
-  server.conf         PORT, LATEST_VERSION, UPDATE_FILE, LOG_FILE, THREAD_POOL_SIZE, TOKENS_FILE
-  client.conf         SERVER_IP, SERVER_PORT, CURRENT_VERSION, DOWNLOAD_DIR, AUTH_TOKEN, MAX_RETRIES, RETRY_DELAY_SECONDS
-  tokens.txt          one valid token per line
-
-update_packages/
-  update_v2.pkg       the file served to outdated clients (replace with any file to test large transfers)
-
-logs/
-  server.log          written at runtime — format: [timestamp] [LEVEL] [TID:N] [client_ip] message
+```sh
+make run-client
 ```
 
----
+The default client config reports version `1`; the server advertises version `2`. The sample package is 50 MiB, so the first client run may take a little while. Downloads are written to `/tmp/updates/` by default.
 
-## How a connection works (in order)
+To remove generated binaries, object files, and local logs:
 
-1. Client connects → sends `AuthRequest` (token string)
-2. Server checks token against `tokens.txt` → sends `AuthResponse` (accepted/rejected)
-3. Client sends `VersionRequest` (current version + resume offset)
-4. Server compares version to latest:
-   - **Up to date** → sends `UpdateResponse` with `update_available=0`, closes
-   - **Outdated** → computes MD5, fills `UpdateResponse` (file size, filename, checksum), streams file bytes from the resume offset
-5. Client receives bytes, appends to local file, re-computes MD5, compares → simulates install
+```sh
+make clean
+```
 
----
+## Tests
 
-## What's been tested ✅
+Run the headless dashboard state suite:
 
-| Scenario                           | Result                                                   |
-| ---------------------------------- | -------------------------------------------------------- |
-| Outdated client (v1, server v2)    | File downloaded, checksum verified                       |
-| Up-to-date client (v2)             | "already up to date" message                             |
-| Wrong auth token                   | Rejected immediately, server stays running               |
-| 3 concurrent clients               | All served simultaneously (different TID in logs)        |
-| Mid-transfer disconnect            | Partial file saved, resumes from correct offset on retry |
-| Retry when server is down          | Retries MAX_RETRIES times with RETRY_DELAY_SECONDS gap   |
-| Checksum mismatch (corrupted file) | Detected, file deleted, clean retry succeeds             |
+```sh
+make test-dashboard
+```
 
----
+The manual integration targets in the Makefile cover outdated and current clients, invalid authentication, concurrent clients, transfers, resume behavior, and pool exhaustion. Start the server before running those client scenarios. `make test-poolexhaust` stops and restarts a local server, so use it only in a dedicated development environment. The automated CI job builds both binaries and runs the headless suite; it does not exercise live networking or open an OpenGL window.
 
-## What's left for partners
+## Configuration
 
-### OpenGL Dashboard (`visualizer/dashboard.c`)
+Edit the sample files under `config/`:
 
-Create a new file `visualizer/dashboard.c`, add it to the Makefile under the server's sources, and link with `-lglut -lGL -lGLU`. The server already has all the data you need — just read from the logger and thread pool. Suggested panels:
+- `server.conf`: listening port, latest version, package path, log path, worker count, and tokens path.
+- `client.conf`: server address, client version, download directory, sample token, and retry settings.
+- `tokens.txt`: one accepted sample token per line.
 
-- Active connections + total served (text counters)
-- One bar per thread showing idle/busy state
-- Scrolling last-N log lines
-- Connection count over time (simple bar chart)
+Paths are relative to the repository root unless they begin with `/`. These credentials are examples for local testing; replace them for your own environment.
 
-Run the dashboard in its own thread spawned from `server.c` before the accept loop.
+## Protocol Outline
 
-### Proper test scenarios (project spec §8)
+1. The client sends an `AuthRequest`; the server accepts or rejects its token.
+2. An authenticated client sends its version and current resume offset.
+3. The server sends an `UpdateResponse`. An up-to-date client closes without downloading.
+4. An outdated client receives the remaining package bytes, appends them to its partial file, and checks the completed file's MD5 digest.
 
-Run and document each of these:
+## Repository Layout
 
-- Single client outdated / up-to-date
-- 8 simultaneous clients
-- Interrupted connection + resume
-- Large file transfer (put a 50MB file in `update_packages/`)
-- Invalid client requests (send garbage version numbers)
-- Pool exhaustion (more clients than `THREAD_POOL_SIZE`)
+```text
+client/          TCP client
+common/          shared configuration and protocol definitions
+config/          local example configurations and tokens
+server/          TCP server, worker pool, transfer handler, and logger
+tests/           headless dashboard tests and test stub
+update_packages/ sample package served to clients
+visualizer/      OpenGL dashboard
+docs/            static GitHub Pages demonstration
+```
 
----
+## Security and Scope
 
-## Notes
+This is a learning project, not a production update service. The TCP protocol has no TLS, sample tokens are sent in plaintext, and MD5 is used only as a corruption check, not as an authenticity or signature mechanism. The server binds to all network interfaces by default. Do not expose it to untrusted networks or use it to distribute real updates without adding transport security, signed packages, robust input validation, and deployment controls.
 
-- All config values are runtime-loaded — no hardcoded ports, versions, or paths. Change `server.conf` or `client.conf` and rerun without recompiling.
-- The server must be started from the repository root because paths like `logs/server.log` and `update_packages/update_v2.pkg` are relative.
-- MD5 is used for checksums (OpenSSL). Compile requires `-lssl -lcrypto`.
+No license is included yet. Public visibility does not grant permission to reuse or redistribute the code; add a license before accepting outside contributions or inviting reuse.
