@@ -1,0 +1,1141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#15231e" />
+    <meta
+      name="description"
+      content="Interactive browser simulation of the Distributed Software Update Framework protocol."
+    />
+    <title>Protocol Lab | Distributed Software Update Framework</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --paper: #edf2ef;
+        --surface: #ffffff;
+        --ink: #15231e;
+        --muted: #60726a;
+        --line: #bdcbc4;
+        --line-dark: #34473e;
+        --red: #e75b45;
+        --green: #2b806c;
+        --lime: #d8ed7a;
+        --blue: #4868c8;
+        --mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+        --display: "Trebuchet MS", "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-width: 320px;
+        margin: 0;
+        color: var(--ink);
+        background-color: var(--paper);
+        background-image:
+          linear-gradient(rgba(21, 35, 30, 0.035) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(21, 35, 30, 0.035) 1px, transparent 1px);
+        background-size: 28px 28px;
+        font-family: var(--display);
+        line-height: 1.45;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .topbar {
+        min-height: 62px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 12px clamp(18px, 4vw, 56px);
+        color: #f5f7f2;
+        background: var(--ink);
+        border-bottom: 3px solid var(--lime);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .brand-mark {
+        display: grid;
+        width: 30px;
+        height: 30px;
+        place-items: center;
+        color: var(--ink);
+        background: var(--lime);
+        font: 700 13px var(--mono);
+      }
+
+      .topbar-meta {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        font: 11px var(--mono);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .topbar a {
+        text-decoration-thickness: 1px;
+        text-underline-offset: 4px;
+      }
+
+      .sim-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--lime);
+      }
+
+      .sim-tag::before {
+        width: 7px;
+        height: 7px;
+        content: "";
+        background: var(--lime);
+        border-radius: 50%;
+      }
+
+      main {
+        width: min(1260px, calc(100% - 40px));
+        margin: 0 auto;
+        padding: 34px 0 54px;
+      }
+
+      .intro {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 28px;
+        margin-bottom: 24px;
+      }
+
+      .eyebrow,
+      .section-label {
+        margin: 0 0 9px;
+        color: var(--green);
+        font: 700 11px var(--mono);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        max-width: 720px;
+        margin: 0;
+        font-size: clamp(30px, 4vw, 48px);
+        line-height: 1.04;
+        font-weight: 700;
+      }
+
+      .intro-copy {
+        max-width: 370px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .notice {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 18px;
+        padding: 11px 14px;
+        color: #34483f;
+        background: #e0ebd1;
+        border-left: 4px solid var(--green);
+        font-size: 13px;
+      }
+
+      .notice strong {
+        white-space: nowrap;
+      }
+
+      .workbench {
+        overflow: hidden;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        box-shadow: 6px 6px 0 rgba(21, 35, 30, 0.08);
+      }
+
+      .workbench-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        min-height: 48px;
+        padding: 10px 18px;
+        color: #f5f7f2;
+        background: #25372f;
+      }
+
+      .workbench-head h2 {
+        margin: 0;
+        font-size: 13px;
+        letter-spacing: 0.03em;
+      }
+
+      .session-code {
+        color: #c7d8ce;
+        font: 11px var(--mono);
+      }
+
+      .workbench-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.4fr) minmax(300px, 0.8fr);
+        min-height: 425px;
+      }
+
+      .flow-column {
+        min-width: 0;
+        padding: 22px;
+        border-right: 1px solid var(--line);
+      }
+
+      .control-strip {
+        display: grid;
+        grid-template-columns: 1fr 1fr minmax(180px, 1.3fr);
+        gap: 12px;
+        align-items: end;
+        padding-bottom: 19px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      label {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--muted);
+        font: 10px var(--mono);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      input,
+      select {
+        width: 100%;
+        min-height: 40px;
+        padding: 8px 10px;
+        color: var(--ink);
+        background: #fbfcfa;
+        border: 1px solid #aebdb5;
+        border-radius: 0;
+        font: 14px var(--mono);
+      }
+
+      input:focus-visible,
+      select:focus-visible,
+      button:focus-visible,
+      a:focus-visible {
+        outline: 3px solid var(--blue);
+        outline-offset: 2px;
+      }
+
+      .flow-stage {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(145px, 1fr) minmax(110px, 0.9fr) minmax(
+            145px,
+            1fr
+          );
+        align-items: center;
+        gap: 12px;
+        min-height: 240px;
+        padding: 28px 0 20px;
+      }
+
+      .endpoint {
+        position: relative;
+        z-index: 1;
+        min-height: 118px;
+        padding: 15px;
+        background: #f8faf8;
+        border: 1px solid var(--line);
+      }
+
+      .endpoint-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        margin-bottom: 14px;
+      }
+
+      .endpoint h3 {
+        margin: 0;
+        font-size: 14px;
+      }
+
+      .endpoint-index {
+        color: var(--muted);
+        font: 10px var(--mono);
+      }
+
+      .endpoint-value {
+        margin: 0;
+        color: var(--muted);
+        font: 11px var(--mono);
+      }
+
+      .endpoint-state {
+        display: inline-block;
+        margin-top: 10px;
+        padding: 3px 7px;
+        color: var(--muted);
+        background: #e8eeea;
+        font: 10px var(--mono);
+        text-transform: uppercase;
+      }
+
+      [data-state="active"] .endpoint-state {
+        color: #fff;
+        background: var(--blue);
+      }
+      [data-state="sending"] .endpoint-state {
+        color: var(--ink);
+        background: var(--lime);
+      }
+      [data-state="success"] .endpoint-state {
+        color: #fff;
+        background: var(--green);
+      }
+      [data-state="error"] .endpoint-state {
+        color: #fff;
+        background: var(--red);
+      }
+
+      .link-lane {
+        position: relative;
+        height: 3px;
+        background: #c7d3cd;
+      }
+
+      .link-lane::before {
+        position: absolute;
+        inset: -5px 0 auto;
+        height: 13px;
+        content: "";
+        border-top: 1px dashed #8a9b92;
+      }
+
+      .packet {
+        position: absolute;
+        top: -7px;
+        left: 0;
+        width: 16px;
+        height: 16px;
+        background: var(--red);
+        border: 2px solid white;
+        opacity: 0;
+        transform: translateX(0);
+      }
+
+      .link-lane.is-moving .packet {
+        opacity: 1;
+        animation: travel 1s linear infinite;
+      }
+
+      @keyframes travel {
+        to {
+          transform: translateX(calc(100% - 16px));
+        }
+      }
+
+      .lane-caption {
+        position: absolute;
+        top: calc(50% + 15px);
+        left: 50%;
+        width: max-content;
+        color: var(--muted);
+        font: 9px var(--mono);
+        text-align: center;
+        transform: translateX(-50%);
+      }
+
+      .transfer {
+        display: grid;
+        grid-template-columns: auto minmax(100px, 1fr) auto;
+        align-items: center;
+        gap: 12px;
+        padding: 13px 0 0;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font: 10px var(--mono);
+      }
+
+      progress {
+        width: 100%;
+        height: 9px;
+        accent-color: var(--green);
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 9px;
+        margin-top: 18px;
+      }
+
+      button {
+        min-height: 40px;
+        padding: 9px 14px;
+        border: 1px solid var(--ink);
+        border-radius: 0;
+        font: 700 12px var(--display);
+        cursor: pointer;
+      }
+
+      .run-button {
+        color: white;
+        background: var(--ink);
+      }
+      .run-button:hover {
+        background: var(--green);
+      }
+      .reset-button {
+        color: var(--ink);
+        background: white;
+      }
+      .reset-button:hover {
+        background: #e9efeb;
+      }
+      button:disabled {
+        cursor: wait;
+        opacity: 0.55;
+      }
+
+      .event-column {
+        min-width: 0;
+        padding: 22px 18px;
+        background: #f8faf8;
+      }
+
+      .event-heading {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+        padding-bottom: 13px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .event-heading h2 {
+        margin: 0;
+        font-size: 14px;
+      }
+      .event-heading span {
+        color: var(--muted);
+        font: 10px var(--mono);
+      }
+
+      .event-list {
+        display: grid;
+        align-content: start;
+        gap: 0;
+        max-height: 340px;
+        margin: 0;
+        padding: 0;
+        overflow-y: auto;
+        list-style: none;
+      }
+
+      .event-list li {
+        display: grid;
+        grid-template-columns: 62px 1fr;
+        gap: 9px;
+        padding: 11px 0;
+        border-bottom: 1px solid #dce4df;
+        font-size: 12px;
+        animation: enter 0.18s ease-out both;
+      }
+
+      @keyframes enter {
+        from {
+          opacity: 0;
+          transform: translateY(4px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .event-time {
+        color: #74857c;
+        font: 10px var(--mono);
+      }
+      .event-message {
+        color: #31443a;
+      }
+      .event-list li[data-kind="error"] .event-message {
+        color: #aa392b;
+      }
+      .event-list li[data-kind="success"] .event-message {
+        color: #206c59;
+      }
+      .event-list li[data-kind="transfer"] .event-message {
+        color: #925137;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        margin-top: 18px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+      }
+
+      .metric {
+        min-height: 78px;
+        padding: 13px 17px;
+        border-right: 1px solid var(--line);
+      }
+      .metric:last-child {
+        border-right: 0;
+      }
+      .metric-label {
+        display: block;
+        color: var(--muted);
+        font: 10px var(--mono);
+        text-transform: uppercase;
+      }
+      .metric-value {
+        display: block;
+        margin-top: 5px;
+        font: 700 23px var(--display);
+      }
+
+      .lower-band {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 28px;
+        margin-top: 38px;
+        padding-top: 22px;
+        border-top: 1px solid var(--line);
+      }
+
+      .lower-band h2 {
+        margin: 0 0 8px;
+        font-size: 17px;
+      }
+      .lower-band p {
+        max-width: 650px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .protocol-list {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .protocol-list li {
+        padding: 10px;
+        border-left: 2px solid var(--red);
+        background: rgba(255, 255, 255, 0.62);
+      }
+      .protocol-list strong {
+        display: block;
+        font: 11px var(--mono);
+      }
+      .protocol-list span {
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 17px clamp(18px, 4vw, 56px);
+        color: #e3ebe6;
+        background: var(--ink);
+        font-size: 11px;
+      }
+
+      footer a {
+        text-underline-offset: 3px;
+      }
+
+      @media (max-width: 820px) {
+        .intro {
+          align-items: start;
+          flex-direction: column;
+        }
+        .workbench-grid {
+          grid-template-columns: 1fr;
+        }
+        .flow-column {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+        .event-list {
+          max-height: 260px;
+        }
+        .lower-band {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 540px) {
+        .topbar {
+          align-items: flex-start;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .topbar-meta {
+          width: 100%;
+          justify-content: space-between;
+        }
+        main {
+          width: min(100% - 24px, 1260px);
+          padding-top: 24px;
+        }
+        .notice {
+          flex-direction: column;
+          gap: 3px;
+        }
+        .notice strong {
+          white-space: normal;
+        }
+        .workbench-head {
+          align-items: flex-start;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .flow-column {
+          padding: 16px 12px;
+        }
+        .control-strip {
+          grid-template-columns: 1fr 1fr;
+        }
+        .control-strip .scenario-field {
+          grid-column: 1 / -1;
+        }
+        .flow-stage {
+          grid-template-columns: minmax(0, 1fr) 52px minmax(0, 1fr);
+          gap: 7px;
+          min-height: 190px;
+        }
+        .endpoint {
+          min-height: 112px;
+          padding: 10px 8px;
+        }
+        .endpoint-head {
+          align-items: flex-start;
+          flex-direction: column;
+          gap: 3px;
+          margin-bottom: 10px;
+        }
+        .endpoint h3 {
+          font-size: 12px;
+        }
+        .endpoint-value {
+          font-size: 9px;
+          overflow-wrap: anywhere;
+        }
+        .lane-caption {
+          top: calc(50% + 13px);
+          font-size: 8px;
+        }
+        .transfer {
+          grid-template-columns: 1fr auto;
+          gap: 7px;
+        }
+        .transfer progress {
+          grid-column: 1 / -1;
+          grid-row: 2;
+        }
+        .event-column {
+          padding: 16px 12px;
+        }
+        .metrics {
+          grid-template-columns: 1fr 1fr;
+        }
+        .metric:nth-child(2) {
+          border-right: 0;
+        }
+        .metric:nth-child(-n + 2) {
+          border-bottom: 1px solid var(--line);
+        }
+        .protocol-list {
+          grid-template-columns: 1fr;
+        }
+        footer {
+          flex-direction: column;
+          gap: 6px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">U3</span
+        ><span>Distributed Software Update Framework</span>
+      </div>
+      <div class="topbar-meta">
+        <span class="sim-tag">Browser simulation</span>
+        <a href="https://github.com/JHT127/real-time-project-three"
+          >Source repository</a
+        >
+      </div>
+    </header>
+
+    <main>
+      <section class="intro" aria-labelledby="page-title">
+        <div>
+          <p class="eyebrow">Protocol lab / 01</p>
+          <h1 id="page-title">Software Update Protocol</h1>
+        </div>
+        <p class="intro-copy">
+          Explore the exchange between an update client and server, from token
+          check through version comparison and package verification.
+        </p>
+      </section>
+
+      <aside class="notice" aria-label="Demo limitation">
+        <strong>Simulation only</strong>
+        <span
+          >This page runs entirely in your browser. It sends no network traffic
+          and does not start the C server.</span
+        >
+      </aside>
+
+      <section class="workbench" aria-labelledby="sim-title">
+        <div class="workbench-head">
+          <h2 id="sim-title">Client / server exchange</h2>
+          <span class="session-code" id="flow-status" role="status"
+            >READY · waiting for input</span
+          >
+        </div>
+
+        <div class="workbench-grid">
+          <div class="flow-column">
+            <form id="sim-form">
+              <div class="control-strip">
+                <div>
+                  <label for="client-version">Client version</label>
+                  <input
+                    id="client-version"
+                    name="clientVersion"
+                    type="number"
+                    min="0"
+                    max="99"
+                    value="1"
+                    required
+                  />
+                </div>
+                <div>
+                  <label for="server-version">Latest version</label>
+                  <input
+                    id="server-version"
+                    name="serverVersion"
+                    type="number"
+                    min="1"
+                    max="99"
+                    value="2"
+                    required
+                  />
+                </div>
+                <div class="scenario-field">
+                  <label for="scenario">Scenario</label>
+                  <select id="scenario" name="scenario">
+                    <option value="normal">Normal transfer</option>
+                    <option value="rejected">Rejected token</option>
+                    <option value="resume">Interrupted, then resumed</option>
+                  </select>
+                </div>
+              </div>
+
+              <div
+                class="flow-stage"
+                aria-label="Client and server connection diagram"
+              >
+                <article class="endpoint" id="client-node" data-state="idle">
+                  <div class="endpoint-head">
+                    <h3>Update client</h3>
+                    <span class="endpoint-index">NODE 01</span>
+                  </div>
+                  <p class="endpoint-value">
+                    reported v<span id="client-version-label">1</span>
+                  </p>
+                  <span class="endpoint-state" id="client-state">idle</span>
+                </article>
+
+                <div class="link-lane" id="link-lane" aria-hidden="true">
+                  <span class="packet"></span>
+                  <span class="lane-caption">TCP / protocol messages</span>
+                </div>
+
+                <article class="endpoint" id="server-node" data-state="idle">
+                  <div class="endpoint-head">
+                    <h3>Update server</h3>
+                    <span class="endpoint-index">NODE 02</span>
+                  </div>
+                  <p class="endpoint-value">
+                    latest v<span id="server-version-label">2</span>
+                  </p>
+                  <span class="endpoint-state" id="server-state">idle</span>
+                </article>
+              </div>
+
+              <div class="transfer">
+                <span>PACKAGE / update_v2.pkg</span>
+                <progress
+                  id="transfer-progress"
+                  max="100"
+                  value="0"
+                  aria-label="Simulated package transfer progress"
+                ></progress>
+                <span id="progress-label">0%</span>
+              </div>
+
+              <div class="actions">
+                <button class="run-button" id="run-button" type="submit">
+                  Run exchange
+                </button>
+                <button class="reset-button" id="reset-button" type="button">
+                  Reset session
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <section class="event-column" aria-labelledby="events-title">
+            <div class="event-heading">
+              <h2 id="events-title">Protocol events</h2>
+              <span id="event-count">0 events</span>
+            </div>
+            <ol
+              class="event-list"
+              id="event-list"
+              aria-live="polite"
+              aria-relevant="additions text"
+            >
+              <li>
+                <time class="event-time">--:--:--</time
+                ><span class="event-message"
+                  >Choose a scenario and run an exchange.</span
+                >
+              </li>
+            </ol>
+          </section>
+        </div>
+      </section>
+
+      <section class="metrics" aria-label="Session totals">
+        <div class="metric">
+          <span class="metric-label">Requests</span
+          ><span class="metric-value" id="metric-requests">0</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Packages verified</span
+          ><span class="metric-value" id="metric-updates">0</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Already current</span
+          ><span class="metric-value" id="metric-current">0</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Auth rejected</span
+          ><span class="metric-value" id="metric-rejected">0</span>
+        </div>
+      </section>
+
+      <section class="lower-band" aria-labelledby="exchange-title">
+        <div>
+          <p class="section-label">What is represented</p>
+          <h2 id="exchange-title">A small protocol, visible step by step.</h2>
+          <p>
+            The local implementation uses TCP sockets and a POSIX worker pool.
+            An authenticated client reports its version and resume offset; the
+            server either closes an up-to-date connection or streams the
+            remaining package bytes.
+          </p>
+        </div>
+        <ul class="protocol-list">
+          <li>
+            <strong>01 / AUTH</strong><span>Token accepted or rejected</span>
+          </li>
+          <li>
+            <strong>02 / VERSION</strong
+            ><span>Compare client and latest versions</span>
+          </li>
+          <li>
+            <strong>03 / VERIFY</strong
+            ><span>Resume transfer and compare MD5</span>
+          </li>
+        </ul>
+      </section>
+    </main>
+
+    <footer>
+      <span>Distributed Software Update Framework · ENCS4330 Project 3</span>
+      <a
+        href="https://github.com/JHT127/real-time-project-three#security-and-scope"
+        >Implementation notes and security scope</a
+      >
+    </footer>
+
+    <script>
+      const form = document.querySelector("#sim-form");
+      const scenarioInput = document.querySelector("#scenario");
+      const clientInput = document.querySelector("#client-version");
+      const serverInput = document.querySelector("#server-version");
+      const runButton = document.querySelector("#run-button");
+      const resetButton = document.querySelector("#reset-button");
+      const eventList = document.querySelector("#event-list");
+      const progress = document.querySelector("#transfer-progress");
+      const lane = document.querySelector("#link-lane");
+      const clientNode = document.querySelector("#client-node");
+      const serverNode = document.querySelector("#server-node");
+      const flowStatus = document.querySelector("#flow-status");
+      const eventCount = document.querySelector("#event-count");
+      const totals = { requests: 0, updates: 0, current: 0, rejected: 0 };
+      let runNumber = 0;
+      let count = 0;
+
+      const pause = (duration) =>
+        new Promise((resolve) => window.setTimeout(resolve, duration));
+
+      function setNode(node, stateId, state, label) {
+        node.dataset.state = state;
+        document.querySelector(`#${stateId}`).textContent = label;
+      }
+
+      function setFlowStatus(value) {
+        flowStatus.textContent = value;
+      }
+
+      function addEvent(message, kind = "info") {
+        const item = document.createElement("li");
+        const time = document.createElement("time");
+        const text = document.createElement("span");
+        time.className = "event-time";
+        time.dateTime = new Date().toISOString();
+        time.textContent = new Intl.DateTimeFormat(undefined, {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        }).format(new Date());
+        text.className = "event-message";
+        text.textContent = message;
+        item.dataset.kind = kind;
+        item.append(time, text);
+        if (count === 0) eventList.replaceChildren();
+        eventList.prepend(item);
+        count++;
+        eventCount.textContent = `${count} event${count === 1 ? "" : "s"}`;
+      }
+
+      function renderTotals() {
+        document.querySelector("#metric-requests").textContent =
+          totals.requests;
+        document.querySelector("#metric-updates").textContent = totals.updates;
+        document.querySelector("#metric-current").textContent = totals.current;
+        document.querySelector("#metric-rejected").textContent =
+          totals.rejected;
+      }
+
+      function setProgress(value) {
+        progress.value = value;
+        document.querySelector("#progress-label").textContent = `${value}%`;
+      }
+
+      function resetFlow() {
+        setNode(clientNode, "client-state", "idle", "idle");
+        setNode(serverNode, "server-state", "idle", "idle");
+        lane.classList.remove("is-moving");
+        setProgress(0);
+        setFlowStatus("READY · waiting for input");
+        runButton.disabled = false;
+      }
+
+      function isCurrentRun(runId) {
+        return runId === runNumber;
+      }
+
+      async function waitFor(runId, duration = 420) {
+        await pause(duration);
+        return isCurrentRun(runId);
+      }
+
+      async function executeExchange(
+        runId,
+        clientVersion,
+        latestVersion,
+        scenario,
+      ) {
+        totals.requests++;
+        renderTotals();
+        setNode(clientNode, "client-state", "active", "auth request");
+        setNode(serverNode, "server-state", "active", "checking token");
+        setFlowStatus("AUTH · validating token");
+        lane.classList.add("is-moving");
+        addEvent("Client sends AuthRequest.");
+        if (!(await waitFor(runId))) return;
+
+        if (scenario === "rejected") {
+          totals.rejected++;
+          renderTotals();
+          setNode(clientNode, "client-state", "error", "rejected");
+          setNode(serverNode, "server-state", "error", "auth denied");
+          setFlowStatus("DENIED · connection closed");
+          addEvent(
+            "Server rejects the sample token and closes the connection.",
+            "error",
+          );
+          lane.classList.remove("is-moving");
+          runButton.disabled = false;
+          return;
+        }
+
+        addEvent(
+          "Server accepts the token; client sends its version and resume offset.",
+        );
+        setNode(clientNode, "client-state", "active", "version request");
+        if (!(await waitFor(runId))) return;
+
+        if (clientVersion >= latestVersion) {
+          totals.current++;
+          renderTotals();
+          setNode(clientNode, "client-state", "success", "up to date");
+          setNode(serverNode, "server-state", "success", "no transfer");
+          setFlowStatus("CURRENT · no package needed");
+          addEvent(
+            `Client v${clientVersion} is current; server closes without sending a package.`,
+            "success",
+          );
+          lane.classList.remove("is-moving");
+          runButton.disabled = false;
+          return;
+        }
+
+        setNode(serverNode, "server-state", "sending", "sending package");
+        setNode(clientNode, "client-state", "active", "receiving");
+        setFlowStatus("TRANSFER · update_v2.pkg");
+        addEvent(
+          `Client v${clientVersion} is behind v${latestVersion}; transfer begins.`,
+          "transfer",
+        );
+
+        const firstPass =
+          scenario === "resume" ? [12, 29, 48] : [12, 29, 48, 68, 86, 100];
+        for (const amount of firstPass) {
+          if (!(await waitFor(runId, 310))) return;
+          setProgress(amount);
+          addEvent(`Package stream at ${amount}%.`, "transfer");
+        }
+
+        if (scenario === "resume") {
+          if (!(await waitFor(runId, 250))) return;
+          lane.classList.remove("is-moving");
+          setFlowStatus("RETRY · partial file kept");
+          addEvent(
+            "Connection drops at 48%; client keeps the partial file.",
+            "error",
+          );
+          if (!(await waitFor(runId, 500))) return;
+          lane.classList.add("is-moving");
+          setFlowStatus("RESUME · offset 24 MiB");
+          addEvent("Client reconnects and reports its saved resume offset.");
+          for (const amount of [66, 83, 100]) {
+            if (!(await waitFor(runId, 310))) return;
+            setProgress(amount);
+            addEvent(`Resumed package stream at ${amount}%.`, "transfer");
+          }
+        }
+
+        if (!(await waitFor(runId, 250))) return;
+        lane.classList.remove("is-moving");
+        setNode(clientNode, "client-state", "success", "verified");
+        setNode(serverNode, "server-state", "success", "transfer complete");
+        setFlowStatus("COMPLETE · checksum verified");
+        totals.updates++;
+        renderTotals();
+        addEvent(
+          "Client compares the completed file's MD5 digest and accepts the package.",
+          "success",
+        );
+        runButton.disabled = false;
+      }
+
+      clientInput.addEventListener("input", () => {
+        document.querySelector("#client-version-label").textContent =
+          clientInput.value || "—";
+      });
+      serverInput.addEventListener("input", () => {
+        document.querySelector("#server-version-label").textContent =
+          serverInput.value || "—";
+      });
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!form.reportValidity()) return;
+        const clientVersion = Number(clientInput.value);
+        const latestVersion = Number(serverInput.value);
+        if (
+          !Number.isInteger(clientVersion) ||
+          !Number.isInteger(latestVersion) ||
+          clientVersion < 0 ||
+          latestVersion < 1
+        )
+          return;
+
+        runNumber++;
+        const runId = runNumber;
+        count = 0;
+        eventList.replaceChildren();
+        setProgress(0);
+        resetFlow();
+        runButton.disabled = true;
+        await executeExchange(
+          runId,
+          clientVersion,
+          latestVersion,
+          scenarioInput.value,
+        );
+      });
+
+      resetButton.addEventListener("click", () => {
+        runNumber++;
+        count = 0;
+        eventList.replaceChildren();
+        eventList.innerHTML =
+          '<li><time class="event-time">--:--:--</time><span class="event-message">Choose a scenario and run an exchange.</span></li>';
+        eventCount.textContent = "0 events";
+        totals.requests = 0;
+        totals.updates = 0;
+        totals.current = 0;
+        totals.rejected = 0;
+        renderTotals();
+        resetFlow();
+      });
+    </script>
+  </body>
+</html>
