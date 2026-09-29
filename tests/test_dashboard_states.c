@@ -76,9 +76,9 @@ static void test_connect_disconnect(void) {
     pthread_mutex_unlock(&g_stats_mutex);
 
     /* One client gets an update, two are already up-to-date */
-    dashboard_on_disconnect(1);   /* update sent */
-    dashboard_on_disconnect(0);   /* up to date  */
-    dashboard_on_disconnect(0);   /* up to date  */
+    dashboard_on_disconnect(DISCONNECT_REASON_UPDATE_SENT);
+    dashboard_on_disconnect(DISCONNECT_REASON_UP_TO_DATE);
+    dashboard_on_disconnect(DISCONNECT_REASON_UP_TO_DATE);
 
     pthread_mutex_lock(&g_stats_mutex);
     CHECK(g_stats.active_connections == 0, "active_connections == 0 after all disconnect");
@@ -95,7 +95,7 @@ static void test_no_negative_connections(void) {
     dashboard_init(4, NULL);
 
     /* Disconnect without any prior connect */
-    dashboard_on_disconnect(0);
+    dashboard_on_disconnect(DISCONNECT_REASON_ERROR);
 
     pthread_mutex_lock(&g_stats_mutex);
     CHECK(g_stats.active_connections >= 0,
@@ -256,14 +256,16 @@ static void test_auth_failures(void) {
 
     dashboard_init(4, NULL);
 
-    pthread_mutex_lock(&g_stats_mutex);
-    g_stats.auth_failures++;
-    g_stats.auth_failures++;
-    g_stats.auth_failures++;
-    pthread_mutex_unlock(&g_stats_mutex);
+    dashboard_on_connect();
+    dashboard_on_disconnect(DISCONNECT_REASON_AUTH_REJECTED);
+    dashboard_on_connect();
+    dashboard_on_disconnect(DISCONNECT_REASON_AUTH_REJECTED);
+    dashboard_on_connect();
+    dashboard_on_disconnect(DISCONNECT_REASON_AUTH_REJECTED);
 
     pthread_mutex_lock(&g_stats_mutex);
-    CHECK(g_stats.auth_failures == 3, "auth_failures == 3 after 3 increments");
+    CHECK(g_stats.auth_failures == 3, "auth_failures == 3 after 3 rejected connections");
+    CHECK(g_stats.active_connections == 0, "rejected connections are closed");
     pthread_mutex_unlock(&g_stats_mutex);
 }
 
