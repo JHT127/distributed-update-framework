@@ -43,8 +43,10 @@ test-dashboard: $(BINDIR)/test_dashboard_states
 	./$(BINDIR)/test_dashboard_states
 
 clean:
-	rm -rf $(BDIR) $(BINDIR) logs/*.log /tmp/updates/
+	rm -rf $(BDIR) $(BINDIR) logs/*.log
+	rm -f /tmp/updates/update_v2.pkg /tmp/update_test_state.txt
 	rm -f /tmp/update-v2-pool-test.pkg
+	rmdir /tmp/updates 2>/dev/null || true
 
 # ═══════════════════════════════════════════════════════════════════════
 #  TEST CONFIG FILES  (created once, reused by every test target)

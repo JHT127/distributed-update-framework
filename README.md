@@ -55,7 +55,7 @@ make run-client
 
 The default client config reports version `1`; the server advertises version `2`. The sample package is 50 MiB, so the first client run may take a little while. Downloads are written to `/tmp/updates/` by default.
 
-To remove generated binaries, object files, and local logs:
+`make clean` removes generated binaries, object files, local logs, and the project's named temporary download/test files. It does not remove other files from `/tmp/updates/`.
 
 ```sh
 make clean
